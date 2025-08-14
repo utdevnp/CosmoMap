@@ -3,11 +3,19 @@ import CryptoJS from 'crypto-js';
 const STORAGE_KEY = 'gxplorer_connections';
 const SECRET_KEY = 'gxplorer_super_secret_key'; // In production, prompt user or use a more secure method
 
+export type ConnectionType = 'local-graph' | 'cosmos-graph' | 'cosmos-nosql';
+
 export interface Connection {
   id: string;
   name: string;
-  type: string; // 'local' | 'cosmos' | ...
-  details: Record<string, any>;
+  type: ConnectionType;
+  details: {
+    url: string;
+    accessKey?: string;      // For Cosmos DB
+    dbName?: string;         // For Cosmos DB
+    graphName?: string;      // For graph APIs
+    collectionName?: string; // For NoSQL
+  };
 }
 
 function encrypt(obj: any): string {

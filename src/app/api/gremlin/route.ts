@@ -11,16 +11,16 @@ export async function POST(req: NextRequest) {
     let client;
 
     switch (type) {
-      case 'local': {
+      case 'local-graph': {
         if (!url) {
           return NextResponse.json({ success: false, error: 'Missing url for local connection.' });
         }
         client = new driver.Client(url, { traversalSource: 'g' });
         break;
       }
-      case 'cosmos': {
+      case 'cosmos-graph': {
         if (!url || !accessKey || !dbName || !graphName) {
-          return NextResponse.json({ success: false, error: 'Missing fields for cosmos connection.' });
+          return NextResponse.json({ success: false, error: 'Missing fields for cosmos graph connection.' });
         }
         const resourcePath = `/dbs/${dbName}/colls/${graphName}`;
         client = new driver.Client(url, {

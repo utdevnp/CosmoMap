@@ -9,8 +9,14 @@ interface QueryBoxProps {
   executeQuery: (e: React.FormEvent) => void;
   queryLoading: boolean;
   queryError: string | null;
-  schema: { vertexLabels: string[]; edgeLabels: string[] } | null;
+  schema: { 
+    vertexLabels?: string[]; 
+    edgeLabels?: string[]; 
+    collections?: any[];
+    database?: string;
+  } | null;
   themeMode?: 'light' | 'dark';
+  connectionType?: 'local-graph' | 'cosmos-graph' | 'cosmos-nosql';
 }
 
 const QueryBox: React.FC<QueryBoxProps> = ({
@@ -21,15 +27,22 @@ const QueryBox: React.FC<QueryBoxProps> = ({
   queryError,
   schema,
   themeMode = 'light',
+  connectionType,
 }) => {
   return (
     <Box component="form" onSubmit={executeQuery} sx={{ width: '100%', background: themeMode === 'dark' ? '#23272f' : '#fff', color: themeMode === 'dark' ? '#e0e0e0' : '#222', borderRadius: 2 }}>
       <Box sx={{ width: '100%', height: 220, mb: 2 }}>
+        {connectionType === 'cosmos-nosql' && null}
+        {connectionType && connectionType !== 'cosmos-nosql' && (
+          <Box sx={{ mb: 1, p: 1, bgcolor: 'info.light', borderRadius: 1, fontSize: '0.875rem' }}>
+            💡 <strong>Gremlin Query Help:</strong> Use Gremlin traversal language. Examples: g.V(), g.V().has('name', 'John')
+          </Box>
+        )}
         <MonacoEditor
           width="100%"
           height="100%"
-          defaultLanguage="gremlin"
-          language="gremlin"
+          defaultLanguage={connectionType === 'cosmos-nosql' ? 'sql' : 'gremlin'}
+          language={connectionType === 'cosmos-nosql' ? 'sql' : 'gremlin'}
           value={query}
           onChange={v => setQuery(v || '')}
           options={{

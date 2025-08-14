@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Button, Typography, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { ConnectionType } from '../../utils/connectionStorage';
 
 interface ConnectionFormProps {
   mode: 'add' | 'edit';
@@ -36,15 +37,32 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({ mode, conn, setConn, on
           labelId="type-label"
           value={conn.type}
           label="Type"
-          onChange={e => setConn({ ...conn, type: e.target.value })}
+          onChange={e => setConn({ ...conn, type: e.target.value as ConnectionType })}
           sx={{ height: 32, fontSize: 14, p: 0 }}
         >
-          <MenuItem value="local">Local Gremlin</MenuItem>
-          <MenuItem value="cosmos">Azure Cosmos Gremlin</MenuItem>
+          <MenuItem value="local-graph">Local Gremlin Server</MenuItem>
+          <MenuItem value="cosmos-graph">Azure Cosmos DB Gremlin</MenuItem>
+          <MenuItem value="cosmos-nosql">Azure Cosmos DB NoSQL (Document)</MenuItem>
         </Select>
+        {conn.type === 'local-graph' && (
+          <Typography variant="caption" color="text.secondary">
+            Connect to a local Gremlin server (e.g., TinkerPop, JanusGraph)
+          </Typography>
+        )}
+        {conn.type === 'cosmos-graph' && (
+          <Typography variant="caption" color="text.secondary">
+            Connect to Azure Cosmos DB using the Gremlin API for graph databases
+          </Typography>
+        )}
+        {conn.type === 'cosmos-nosql' && (
+          <Typography variant="caption" color="text.secondary">
+            Connect to Azure Cosmos DB using the SQL (Core) API for document databases
+          </Typography>
+        )}
       </FormControl>
-      {/* Dynamic fields */}
-      {conn.type === 'local' ? (
+      
+      {/* Dynamic fields based on connection type */}
+      {conn.type === 'local-graph' ? (
         <TextField
           type="text"
           label="URL"
@@ -62,7 +80,7 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({ mode, conn, setConn, on
           }}
           required
         />
-      ) : (
+      ) : conn.type === 'cosmos-graph' ? (
         <>
           <TextField
             type="text"
@@ -133,7 +151,79 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({ mode, conn, setConn, on
             required
           />
         </>
-      )}
+      ) : conn.type === 'cosmos-nosql' ? (
+        <>
+          <TextField
+            type="text"
+            label="URL"
+            value={conn.url}
+            onChange={e => setConn({ ...conn, url: e.target.value })}
+            fullWidth
+            size="small"
+            placeholder="Cosmos DB SQL endpoint"
+            InputLabelProps={{ sx: { fontSize: 14, top: '-4px' } }}
+            InputProps={{
+              sx: {
+                '& input': { padding: '6px 8px', height: 18, fontSize: 14 },
+                '& input::placeholder': { fontSize: 14, opacity: 0.7 },
+              },
+            }}
+            required
+          />
+          <TextField
+            type="text"
+            label="Access Key"
+            value={conn.accessKey}
+            onChange={e => setConn({ ...conn, accessKey: e.target.value })}
+            fullWidth
+            size="small"
+            placeholder="Primary or secondary key"
+            InputLabelProps={{ sx: { fontSize: 14, top: '-4px' } }}
+            InputProps={{
+              sx: {
+                '& input': { padding: '6px 8px', height: 18, fontSize: 14 },
+                '& input::placeholder': { fontSize: 14, opacity: 0.7 },
+              },
+            }}
+            required
+          />
+          <TextField
+            type="text"
+            label="Database Name"
+            value={conn.dbName}
+            onChange={e => setConn({ ...conn, dbName: e.target.value })}
+            fullWidth
+            size="small"
+            placeholder="Database name"
+            InputLabelProps={{ sx: { fontSize: 14, top: '-4px' } }}
+            InputProps={{
+              sx: {
+                '& input': { padding: '6px 8px', height: 18, fontSize: 14 },
+                '& input::placeholder': { fontSize: 14, opacity: 0.7 },
+              },
+            }}
+            required
+          />
+          <TextField
+            type="text"
+            label="Collection Name"
+            value={conn.collectionName}
+            onChange={e => setConn({ ...conn, collectionName: e.target.value })}
+            fullWidth
+            size="small"
+            placeholder="Collection/Container name"
+            InputLabelProps={{ sx: { fontSize: 14, top: '-4px' } }}
+            InputProps={{
+              sx: {
+                '& input': { padding: '6px 8px', height: 18, fontSize: 14 },
+                '& input::placeholder': { fontSize: 14, opacity: 0.7 },
+              },
+            }}
+            required
+          />
+        </>
+      ) : null}
+      
       <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
         <Button type="submit" variant="contained" color="primary" size="small" sx={{ minWidth: 0 }}>
           Save

@@ -26,6 +26,8 @@ import {
   Switch,
   FormControlLabel
 } from '@mui/material';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
 import CytoscapeComponent from 'react-cytoscapejs';
 import Popover from '@mui/material/Popover';
 import Drawer from '@mui/material/Drawer';
@@ -46,7 +48,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import GraphViewer from './components/GraphViewer';
 import dynamic from 'next/dynamic';
 import MenuIcon from '@mui/icons-material/Menu';
-import { getConnections, saveConnection, deleteConnection, updateConnection, Connection } from '../utils/connectionStorage';
+import { getConnections, saveConnection, deleteConnection, updateConnection, Connection, ConnectionType } from '../utils/connectionStorage';
 import { v4 as uuidv4 } from 'uuid';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
@@ -77,6 +79,38 @@ const colorPalette = [
   '#00acc1', // cyan
 ];
 
+function formatRelativeTime(fromMs: number): string {
+  const now = Date.now();
+  let diff = Math.max(0, Math.floor((now - fromMs) / 1000)); // seconds
+  if (diff < 60) return diff <= 1 ? '1 sec ago' : `${diff} secs ago`;
+  const minutes = Math.floor(diff / 60);
+  if (minutes < 60) return minutes === 1 ? '1 min ago' : `${minutes} mins ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return days === 1 ? '1 day ago' : `${days} days ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return months === 1 ? '1 month ago' : `${months} months ago`;
+  const years = Math.floor(months / 12);
+  return years === 1 ? '1 year ago' : `${years} years ago`;
+}
+
+function getDocumentTimestampMs(doc: any): number {
+  if (!doc || typeof doc !== 'object') return 0;
+  if (doc._ts != null && !Number.isNaN(Number(doc._ts))) {
+    return Number(doc._ts) * 1000; // Cosmos _ts is seconds
+  }
+  if (doc.createdAt) {
+    const t = Date.parse(doc.createdAt);
+    return Number.isNaN(t) ? 0 : t;
+  }
+  if (doc._lastModified) {
+    const t = Date.parse(doc._lastModified);
+    return Number.isNaN(t) ? 0 : t;
+  }
+  return 0;
+}
+
 // Key for localStorage
 const QUERY_HISTORY_KEY = 'gremlin_query_history';
 
@@ -98,7 +132,12 @@ function sanitizeDataObject(data: Record<string, any>) {
 
 export default function Home() {
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
-  const [schema, setSchema] = useState<{ vertexLabels: string[]; edgeLabels: string[] } | null>(null);
+  const [schema, setSchema] = useState<{ 
+    vertexLabels?: string[]; 
+    edgeLabels?: string[]; 
+    collections?: any[];
+    database?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState('');
@@ -124,11 +163,12 @@ export default function Home() {
   const [addMode, setAddMode] = useState(false);
   const [newConn, setNewConn] = useState({
     name: '',
-    type: 'local',
+    type: 'local-graph' as ConnectionType,
     url: '',
     accessKey: '',
     dbName: '',
     graphName: '',
+    collectionName: '',
   });
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
@@ -225,6 +265,13 @@ export default function Home() {
         success: undefined,
       });
       fetchSchema();
+      
+      // Update query based on connection type
+      if (selectedConnection.type === 'cosmos-nosql') {
+        setQuery("SELECT * FROM c LIMIT 10");
+      } else {
+        setQuery('g.V().limit(10)');
+      }
     }
   }, [selectedConnectionId]);
 
@@ -234,8 +281,22 @@ export default function Home() {
     setError(null);
     const start = Date.now();
     try {
-      const body: any = { type: selectedConnection.type, ...selectedConnection.details };
-      const res = await fetch('/api/gremlin', {
+      let body: any;
+      let endpoint: string;
+      
+      if (selectedConnection.type === 'cosmos-nosql') {
+        endpoint = '/api/cosmos';
+        body = { 
+          type: selectedConnection.type, 
+          operation: 'schema',
+          ...selectedConnection.details 
+        };
+      } else {
+        endpoint = '/api/gremlin';
+        body = { type: selectedConnection.type, ...selectedConnection.details };
+      }
+      
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -292,6 +353,13 @@ export default function Home() {
   const createLabel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedConnection || !newLabel) return;
+    
+    // Don't allow label creation for NoSQL connections
+    if (selectedConnection.type === 'cosmos-nosql') {
+      setError('Label creation is not supported for NoSQL connections. Use document operations instead.');
+      return;
+    }
+    
     setCreating(true);
     setError(null);
     let labelQuery = '';
@@ -301,8 +369,10 @@ export default function Home() {
       labelQuery = `v1 = graph.addVertex(); v2 = graph.addVertex(); v1.addEdge('${newLabel}', v2)`;
     }
     try {
-      const body: any = { type: selectedConnection.type, query: labelQuery, ...selectedConnection.details };
-      const res = await fetch('/api/gremlin', {
+      const endpoint = '/api/gremlin';
+      const body = { type: selectedConnection.type, query: labelQuery, ...selectedConnection.details };
+      
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -336,8 +406,23 @@ export default function Home() {
       return next;
     });
     try {
-      const body: any = { type: selectedConnection.type, query, ...selectedConnection.details };
-      const res = await fetch('/api/gremlin', {
+      let body: any;
+      let endpoint: string;
+      
+      if (selectedConnection.type === 'cosmos-nosql') {
+        endpoint = '/api/cosmos';
+        body = { 
+          type: selectedConnection.type, 
+          operation: 'query',
+          query,
+          ...selectedConnection.details 
+        };
+      } else {
+        endpoint = '/api/gremlin';
+        body = { type: selectedConnection.type, query, ...selectedConnection.details };
+      }
+      
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -345,7 +430,15 @@ export default function Home() {
       const data = await res.json();
       const execTime = Date.now() - start;
       if (data.success) {
-        setQueryResult(data.result);
+        // Handle different result formats for different connection types
+        if (selectedConnection.type === 'cosmos-nosql') {
+          // For NoSQL, the result structure is different
+          setQueryResult(data.result);
+        } else {
+          // For graph databases, keep the existing structure
+          setQueryResult(data.result);
+        }
+        
         logToConsole({
           type: 'query',
           message: `Query executed successfully (${execTime} ms)`,
@@ -452,15 +545,23 @@ export default function Home() {
       id: uuidv4(),
       name: newConn.name,
       type: newConn.type,
-      details:
-        newConn.type === 'local'
-          ? { url: newConn.url }
-          : { url: newConn.url, accessKey: newConn.accessKey, dbName: newConn.dbName, graphName: newConn.graphName },
+      details: (() => {
+        switch (newConn.type) {
+          case 'local-graph':
+            return { url: newConn.url };
+          case 'cosmos-graph':
+            return { url: newConn.url, accessKey: newConn.accessKey, dbName: newConn.dbName, graphName: newConn.graphName };
+          case 'cosmos-nosql':
+            return { url: newConn.url, accessKey: newConn.accessKey, dbName: newConn.dbName, collectionName: newConn.collectionName };
+          default:
+            return { url: newConn.url };
+        }
+      })(),
     };
     saveConnection(conn);
     setConnections(getConnections());
     setAddMode(false);
-    setNewConn({ name: '', type: 'local', url: '', accessKey: '', dbName: '', graphName: '' });
+    setNewConn({ name: '', type: 'local-graph', url: '', accessKey: '', dbName: '', graphName: '', collectionName: '' });
   };
 
   const [editConnId, setEditConnId] = useState<string | null>(null);
@@ -481,10 +582,18 @@ export default function Home() {
       id: editConnId,
       name: editConn.name,
       type: editConn.type,
-      details:
-        editConn.type === 'local'
-          ? { url: editConn.url }
-          : { url: editConn.url, accessKey: editConn.accessKey, dbName: editConn.dbName, graphName: editConn.graphName },
+      details: (() => {
+        switch (editConn.type) {
+          case 'local-graph':
+            return { url: editConn.url };
+          case 'cosmos-graph':
+            return { url: editConn.url, accessKey: editConn.accessKey, dbName: editConn.dbName, graphName: editConn.graphName };
+          case 'cosmos-nosql':
+            return { url: editConn.url, accessKey: editConn.accessKey, dbName: editConn.dbName, collectionName: editConn.collectionName };
+          default:
+            return { url: editConn.url };
+        }
+      })(),
     };
     updateConnection(editConnId, updated);
     setConnections(getConnections());
@@ -512,6 +621,11 @@ export default function Home() {
   // Simple in-memory cache for vertex details
   const vertexCache = useRef<{ [id: string]: any }>({});
 
+  // Expanded state for NoSQL document accordions (keyed by document id/_rid/index)
+  const [expandedDocs, setExpandedDocs] = useState<Record<string, boolean>>({});
+  // Selected document key for NoSQL list highlighting
+  const [selectedDocKey, setSelectedDocKey] = useState<string | null>(null);
+
   // CHECKPOINT: Vertex detail fetch logic updated for Cosmos DB compatibility (ID handling and logging)
   const [nodeDataLoading, setNodeDataLoading] = useState(false);
   const fetchVertexDetails = async (id: string | number) => {
@@ -533,10 +647,26 @@ export default function Home() {
       const isNumericId = typeof id === 'number' || (!isNaN(Number(id)) && !/^0[0-9]+$/.test(id));
       const idPart = isNumericId ? id : `'${id}'`;
       const query = `g.V(${idPart}).valueMap(true)`;
-      const res = await fetch('/api/gremlin', {
+      let endpoint: string;
+      let body: any;
+      
+      if (selectedConnection.type === 'cosmos-nosql') {
+        endpoint = '/api/cosmos';
+        body = { 
+          type: selectedConnection.type, 
+          operation: 'query',
+          query: `SELECT * FROM c WHERE c.id = '${id}'`,
+          ...selectedConnection.details 
+        };
+      } else {
+        endpoint = '/api/gremlin';
+        body = { type: selectedConnection.type, query, ...selectedConnection.details };
+      }
+      
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: selectedConnection.type, query, ...selectedConnection.details }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       console.log('Cosmos DB vertex fetch response:', data);
@@ -818,6 +948,7 @@ export default function Home() {
                     queryError={queryError}
                     schema={schema}
                     themeMode={themeMode}
+                    connectionType={selectedConnection?.type}
                   />
                 </Paper>
                 {/* Panels below */}
@@ -827,16 +958,17 @@ export default function Home() {
                     <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
                       {/* Tabs for Query Result, Schema, Node Data */}
                       <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} aria-label="Result Tabs">
-                        <Tab label="Query Result" />
+                        <Tab sx={{ display: selectedConnection?.type === 'cosmos-nosql' ? 'none' : 'inline-flex' }} label="Query Result" />
                         <Tab label="Schema" />
-                        <Tab label="Node Data" />
+                        <Tab label={selectedConnection?.type === 'cosmos-nosql' ? 'Document Data' : 'Node Data'} />
                       </Tabs>
                       <Box sx={{ mt: 2 }}>
-                        {tabIndex === 0 && (
+                        {selectedConnection?.type !== 'cosmos-nosql' && tabIndex === 0 && (
                           <QueryResultTab
                             queryResult={queryResult}
                             queryLoading={queryLoading}
                             themeMode={themeMode}
+                            connectionType={selectedConnection?.type}
                           />
                         )}
                         {tabIndex === 1 && (
@@ -845,7 +977,43 @@ export default function Home() {
                               <CircularProgress />
                             </Box>
                           ) : (
-                            <SchemaBox schema={schema} />
+                            <>
+                              <SchemaBox schema={schema} />
+                              {/* Only show label creation for graph connections */}
+                              {selectedConnection && selectedConnection.type !== 'cosmos-nosql' && schema && (
+                                <Box sx={{ mt: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                                  <Typography variant="h6" gutterBottom>Create New Label</Typography>
+                                  <Box component="form" onSubmit={createLabel} sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                    <TextField
+                                      size="small"
+                                      label="Label Name"
+                                      value={newLabel}
+                                      onChange={e => setNewLabel(e.target.value)}
+                                      required
+                                    />
+                                    <FormControl size="small">
+                                      <InputLabel>Type</InputLabel>
+                                      <Select
+                                        value={labelType}
+                                        label="Type"
+                                        onChange={e => setLabelType(e.target.value as 'vertex' | 'edge')}
+                                      >
+                                        <MenuItem value="vertex">Vertex</MenuItem>
+                                        <MenuItem value="edge">Edge</MenuItem>
+                                      </Select>
+                                    </FormControl>
+                                    <Button
+                                      type="submit"
+                                      variant="contained"
+                                      disabled={creating}
+                                      size="small"
+                                    >
+                                      {creating ? <CircularProgress size={20} /> : 'Create'}
+                                    </Button>
+                                  </Box>
+                                </Box>
+                              )}
+                            </>
                           )
                         )}
                         {tabIndex === 2 && (
@@ -853,6 +1021,7 @@ export default function Home() {
                             selectedNodeData={selectedNodeData}
                             nodeDataLoading={nodeDataLoading}
                             themeMode={themeMode}
+                            connectionType={selectedConnection?.type}
                           />
                         )}
                       </Box>
@@ -869,19 +1038,92 @@ export default function Home() {
                   ) : queryError ? (
                     <Alert severity="error">{queryError}</Alert>
                   ) : queryResult && (Array.isArray(queryResult) ? queryResult.length > 0 : typeof queryResult === 'object' && Object.keys(queryResult).length > 0) ? (
-                    <GraphViewer
-                      data={queryResult}
-                      loading={queryLoading}
-                      error={queryError}
-                      setSelectedNodeData={data => {
-                        setSelectedNodeData(data);
-                        setTabIndex(2);
-                      }}
-                      showNodeTooltips={showNodeTooltips}
-                      onNodeClick={fetchVertexDetails}
-                    />
+                    selectedConnection?.type === 'cosmos-nosql' ? (
+                      // Show NoSQL results as a list of documents, each titled by its id
+                      <Box sx={{ p: 2 }}>
+                        <Box sx={{ 
+                          bgcolor: themeMode === 'dark' ? '#23272f' : '#fff',
+                          border: '1px solid',
+                          borderColor: themeMode === 'dark' ? '#2f333b' : '#e0e0e0',
+                          borderRadius: 1,
+                          boxShadow: 'none'
+                        }}>
+                          <Box sx={{ maxHeight: '70vh', overflow: 'auto' }}>
+                          <List dense sx={{ p: 0 }}>
+                            {(
+                              (Array.isArray(queryResult) ? queryResult : Array.isArray(queryResult?.documents) ? queryResult.documents : [])
+                                .slice()
+                                .sort((a: any, b: any) => getDocumentTimestampMs(b) - getDocumentTimestampMs(a))
+                            ).map((doc: any, idx: number) => {
+                              const docKey = String(doc?.id ?? doc?._rid ?? idx);
+                              return (
+                                <ListItemButton
+                                  key={docKey}
+                                  selected={selectedDocKey === docKey}
+                                  onClick={() => {
+                                    setSelectedNodeData(doc);
+                                    setSelectedDocKey(docKey);
+                                    setTabIndex(2);
+                                  }}
+                                  sx={{
+                                    borderRadius: 0,
+                                    py: 0.75,
+                                    px: 1,
+                                    transition: 'background-color 120ms ease',
+                                    borderBottom: '1px solid',
+                                    borderBottomColor: themeMode === 'dark' ? '#2f333b' : '#e0e0e0',
+                                    '&:last-of-type': { borderBottom: 'none' },
+                                    '&.Mui-selected': {
+                                      bgcolor: '#66bb6a',
+                                      color: '#ffffff',
+                                      borderBottomColor: '#2e7d32',
+                                    },
+                                    '&.Mui-selected:hover': {
+                                      bgcolor: '#5aae5f',
+                                    },
+                                  }}
+                                >
+                                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
+                                      <Typography variant="caption" sx={{ minWidth: 18, textAlign: 'right', color: 'inherit', opacity: 0.9 }}>
+                                        {idx + 1}.
+                                      </Typography>
+                                      <Typography 
+                                        variant="body2" 
+                                        sx={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'inherit' }}
+                                      >
+                                        {doc?.id ?? `(no id)`}
+                                      </Typography>
+                                    </Box>
+                                    <Typography variant="caption" color="text.secondary" sx={{ ml: 2, whiteSpace: 'nowrap' }}>
+                                      {(() => {
+                                        const ts = doc?._ts ? Number(doc._ts) * 1000 : (doc?.createdAt ? Date.parse(doc.createdAt) : NaN);
+                                        return isNaN(ts) ? '' : formatRelativeTime(ts);
+                                      })()}
+                                    </Typography>
+                                  </Box>
+                                </ListItemButton>
+                              );
+                            })}
+                          </List>
+                          </Box>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <GraphViewer
+                        data={queryResult}
+                        loading={queryLoading}
+                        error={queryError}
+                        setSelectedNodeData={data => {
+                          setSelectedNodeData(data);
+                          setTabIndex(2);
+                        }}
+                        showNodeTooltips={showNodeTooltips}
+                        onNodeClick={fetchVertexDetails}
+                      />
+                    )
                   ) : (
-                    <Alert severity="info">No graph data to display.</Alert>
+                    <Alert severity="info">No data to display.</Alert>
                   )}
                 </Box>
 
