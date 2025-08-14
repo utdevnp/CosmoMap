@@ -31,13 +31,13 @@ const QueryBox: React.FC<QueryBoxProps> = ({
 }) => {
   return (
     <Box component="form" onSubmit={executeQuery} sx={{ width: '100%', background: themeMode === 'dark' ? '#23272f' : '#fff', color: themeMode === 'dark' ? '#e0e0e0' : '#222', borderRadius: 2 }}>
-      <Box sx={{ width: '100%', height: 220, mb: 2 }}>
-        {connectionType === 'cosmos-nosql' && null}
-        {connectionType && connectionType !== 'cosmos-nosql' && (
-          <Box sx={{ mb: 1, p: 1, bgcolor: 'info.light', borderRadius: 1, fontSize: '0.875rem' }}>
-            💡 <strong>Gremlin Query Help:</strong> Use Gremlin traversal language. Examples: g.V(), g.V().has('name', 'John')
+      <Box sx={{ width: '100%', height: connectionType === 'cosmos-nosql' ? 150 : 220, mb: connectionType === 'cosmos-nosql' ? 1 : 2 }}>
+        {connectionType !== 'cosmos-nosql' && (
+          <Box sx={{ mb: 0.5, color: 'text.secondary', fontSize: 12 }}>
+            Press Ctrl/Cmd + H to open history
           </Box>
         )}
+        {connectionType === 'cosmos-nosql' && null}
         <MonacoEditor
           width="100%"
           height="100%"
@@ -179,7 +179,7 @@ const QueryBox: React.FC<QueryBoxProps> = ({
                     })),
                   ];
                   if (schema) {
-                    schema.vertexLabels.forEach(label => {
+                    (schema.vertexLabels || []).forEach(label => {
                       suggestions.push({
                         label: label,
                         kind: monaco.languages.CompletionItemKind.Class,
@@ -188,7 +188,7 @@ const QueryBox: React.FC<QueryBoxProps> = ({
                         range,
                       });
                     });
-                    schema.edgeLabels.forEach(label => {
+                    (schema.edgeLabels || []).forEach(label => {
                       suggestions.push({
                         label: label,
                         kind: monaco.languages.CompletionItemKind.Enum,

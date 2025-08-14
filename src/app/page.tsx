@@ -27,6 +27,7 @@ import {
   FormControlLabel
 } from '@mui/material';
 import List from '@mui/material/List';
+import NoSqlResultsList from './components/nosql/NoSqlResultsList';
 import ListItemButton from '@mui/material/ListItemButton';
 import CytoscapeComponent from 'react-cytoscapejs';
 import Popover from '@mui/material/Popover';
@@ -42,7 +43,6 @@ import type { editor as MonacoEditorType, Position as MonacoPosition } from 'mon
 import QueryBox from './components/QueryBox';
 import QueryResult from './components/QueryResult';
 import SchemaBox from './components/SchemaBox';
-import FetchSchemaBox from './components/FetchSchemaBox';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import GraphViewer from './components/GraphViewer';
@@ -111,8 +111,9 @@ function getDocumentTimestampMs(doc: any): number {
   return 0;
 }
 
-// Key for localStorage
-const QUERY_HISTORY_KEY = 'gremlin_query_history';
+// Keys for localStorage
+const GREMLIN_HISTORY_KEY = 'gremlin_query_history';
+const NOSQL_HISTORY_KEY = 'nosql_query_history';
 
 function sanitizeDataObject(data: Record<string, any>) {
   const clean: Record<string, any> = {};
@@ -154,8 +155,9 @@ export default function Home() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [layout, setLayout] = useState('cose');
   const [search, setSearch] = useState('');
-  // Query history state
-  const [queryHistory, setQueryHistory] = useState<string[]>([]);
+  // Query history state (separate for graph and NoSQL)
+  const [gremlinHistory, setGremlinHistory] = useState<string[]>([]);
+  const [nosqlHistory, setNosqlHistory] = useState<string[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [tabIndex, setTabIndex] = useState(0);
   const [selectedNodeData, setSelectedNodeData] = useState<any>(null);
@@ -211,18 +213,23 @@ export default function Home() {
 
   // Load history from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(QUERY_HISTORY_KEY);
-    if (stored) {
-      try {
-        setQueryHistory(JSON.parse(stored));
-      } catch { }
+    const g = localStorage.getItem(GREMLIN_HISTORY_KEY);
+    if (g) {
+      try { setGremlinHistory(JSON.parse(g)); } catch {}
+    }
+    const n = localStorage.getItem(NOSQL_HISTORY_KEY);
+    if (n) {
+      try { setNosqlHistory(JSON.parse(n)); } catch {}
     }
   }, []);
 
   // Save history to localStorage when it changes
   useEffect(() => {
-    localStorage.setItem(QUERY_HISTORY_KEY, JSON.stringify(queryHistory));
-  }, [queryHistory]);
+    localStorage.setItem(GREMLIN_HISTORY_KEY, JSON.stringify(gremlinHistory));
+  }, [gremlinHistory]);
+  useEffect(() => {
+    localStorage.setItem(NOSQL_HISTORY_KEY, JSON.stringify(nosqlHistory));
+  }, [nosqlHistory]);
 
   // Load connections initially
   useEffect(() => {
@@ -268,9 +275,9 @@ export default function Home() {
       
       // Update query based on connection type
       if (selectedConnection.type === 'cosmos-nosql') {
-        setQuery("SELECT * FROM c LIMIT 10");
+        setQuery("SELECT * FROM c");
       } else {
-        setQuery('g.V().limit(10)');
+        setQuery('g.E().limit(10)');
       }
     }
   }, [selectedConnectionId]);
@@ -398,13 +405,7 @@ export default function Home() {
     setQueryError(null);
     setQueryResult(null);
     const start = Date.now();
-    setQueryHistory(prev => {
-      const trimmed = query.trim();
-      if (!trimmed) return prev;
-      if (prev[0] === trimmed) return prev;
-      const next = [trimmed, ...prev.filter(q => q !== trimmed)].slice(0, 20);
-      return next;
-    });
+    // Do not save yet; only save after success below (and separate stores)
     try {
       let body: any;
       let endpoint: string;
@@ -434,9 +435,25 @@ export default function Home() {
         if (selectedConnection.type === 'cosmos-nosql') {
           // For NoSQL, the result structure is different
           setQueryResult(data.result);
+          // Save NoSQL history (on success only)
+          setNosqlHistory(prev => {
+            const trimmed = query.trim();
+            if (!trimmed) return prev;
+            if (prev[0] === trimmed) return prev;
+            const next = [trimmed, ...prev.filter(q => q !== trimmed)].slice(0, 50);
+            return next;
+          });
         } else {
           // For graph databases, keep the existing structure
           setQueryResult(data.result);
+          // Save Gremlin history (on success only)
+          setGremlinHistory(prev => {
+            const trimmed = query.trim();
+            if (!trimmed) return prev;
+            if (prev[0] === trimmed) return prev;
+            const next = [trimmed, ...prev.filter(q => q !== trimmed)].slice(0, 50);
+            return next;
+          });
         }
         
         logToConsole({
@@ -717,6 +734,25 @@ export default function Home() {
     document.body.setAttribute('data-theme', themeMode);
   }, [themeMode]);
 
+  const [consoleActiveTab, setConsoleActiveTab] = useState<'console' | 'history-gremlin' | 'history-nosql'>('console');
+
+  // Ctrl/Cmd + H: open console history for current connection type
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
+        e.preventDefault();
+        setConsoleOpen(true);
+        if (selectedConnection?.type === 'cosmos-nosql') {
+          setConsoleActiveTab('history-nosql');
+        } else {
+          setConsoleActiveTab('history-gremlin');
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   return (
     <ThemeProvider theme={theme}>
       <ErrorBoundary logToConsole={logToConsole}>
@@ -735,7 +771,7 @@ export default function Home() {
                   <MenuIcon sx={{ color: themeMode === 'dark' ? '#e0e0e0' : 'black' }} />
                 </IconButton>
                 <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main', letterSpacing: 1 }}>
-                  GXplorer
+                CosmoMap
                 </Typography>
               </Box>
               {/* Theme switcher icon button before connection select */}
@@ -895,51 +931,7 @@ export default function Home() {
                   <Typography variant="h6" gutterBottom>
                     Query Editor
                   </Typography>
-                  {/* Query History */}
-                  {queryHistory.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary', display: 'flex', alignItems: 'center' }}>
-                        History
-                        {queryHistory.length > 1 && (
-                          <IconButton size="small" onClick={() => setHistoryOpen(o => !o)} sx={{ ml: 1 }}>
-                            {historyOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                          </IconButton>
-                        )}
-                      </Typography>
-                      {/* Latest history always visible */}
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        <Button
-                          key={queryHistory[0] + 'latest'}
-                          size="small"
-                          variant={queryHistory[0] === query ? 'contained' : 'outlined'}
-                          color="secondary"
-                          sx={{ fontFamily: 'monospace', textTransform: 'none', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                          onClick={() => setQuery(queryHistory[0])}
-                        >
-                          {queryHistory[0].length > 60 ? queryHistory[0].slice(0, 57) + '...' : queryHistory[0]}
-                        </Button>
-                      </Box>
-                      {/* Collapsible rest of history */}
-                      {queryHistory.length > 1 && (
-                        <Collapse in={historyOpen}>
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                            {queryHistory.slice(1).map((q, i) => (
-                              <Button
-                                key={q + i}
-                                size="small"
-                                variant={q === query ? 'contained' : 'outlined'}
-                                color="secondary"
-                                sx={{ fontFamily: 'monospace', textTransform: 'none', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                onClick={() => setQuery(q)}
-                              >
-                                {q.length > 60 ? q.slice(0, 57) + '...' : q}
-                              </Button>
-                            ))}
-                          </Box>
-                        </Collapse>
-                      )}
-                    </Box>
-                  )}
+                  {/* Inline history removed; use bottom Console tabs (Ctrl/Cmd+H) */}
                   <QueryBox
                     query={query}
                     setQuery={setQuery}
@@ -959,7 +951,7 @@ export default function Home() {
                       {/* Tabs for Query Result, Schema, Node Data */}
                       <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} aria-label="Result Tabs">
                         <Tab sx={{ display: selectedConnection?.type === 'cosmos-nosql' ? 'none' : 'inline-flex' }} label="Query Result" />
-                        <Tab label="Schema" />
+                        <Tab label={selectedConnection?.type === 'cosmos-nosql' ? 'Metadata' : 'Schema'} />
                         <Tab label={selectedConnection?.type === 'cosmos-nosql' ? 'Document Data' : 'Node Data'} />
                       </Tabs>
                       <Box sx={{ mt: 2 }}>
@@ -979,40 +971,7 @@ export default function Home() {
                           ) : (
                             <>
                               <SchemaBox schema={schema} />
-                              {/* Only show label creation for graph connections */}
-                              {selectedConnection && selectedConnection.type !== 'cosmos-nosql' && schema && (
-                                <Box sx={{ mt: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
-                                  <Typography variant="h6" gutterBottom>Create New Label</Typography>
-                                  <Box component="form" onSubmit={createLabel} sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <TextField
-                                      size="small"
-                                      label="Label Name"
-                                      value={newLabel}
-                                      onChange={e => setNewLabel(e.target.value)}
-                                      required
-                                    />
-                                    <FormControl size="small">
-                                      <InputLabel>Type</InputLabel>
-                                      <Select
-                                        value={labelType}
-                                        label="Type"
-                                        onChange={e => setLabelType(e.target.value as 'vertex' | 'edge')}
-                                      >
-                                        <MenuItem value="vertex">Vertex</MenuItem>
-                                        <MenuItem value="edge">Edge</MenuItem>
-                                      </Select>
-                                    </FormControl>
-                                    <Button
-                                      type="submit"
-                                      variant="contained"
-                                      disabled={creating}
-                                      size="small"
-                                    >
-                                      {creating ? <CircularProgress size={20} /> : 'Create'}
-                                    </Button>
-                                  </Box>
-                                </Box>
-                              )}
+                             
                             </>
                           )
                         )}
@@ -1039,76 +998,14 @@ export default function Home() {
                     <Alert severity="error">{queryError}</Alert>
                   ) : queryResult && (Array.isArray(queryResult) ? queryResult.length > 0 : typeof queryResult === 'object' && Object.keys(queryResult).length > 0) ? (
                     selectedConnection?.type === 'cosmos-nosql' ? (
-                      // Show NoSQL results as a list of documents, each titled by its id
-                      <Box sx={{ p: 2 }}>
-                        <Box sx={{ 
-                          bgcolor: themeMode === 'dark' ? '#23272f' : '#fff',
-                          border: '1px solid',
-                          borderColor: themeMode === 'dark' ? '#2f333b' : '#e0e0e0',
-                          borderRadius: 1,
-                          boxShadow: 'none'
-                        }}>
-                          <Box sx={{ maxHeight: '70vh', overflow: 'auto' }}>
-                          <List dense sx={{ p: 0 }}>
-                            {(
-                              (Array.isArray(queryResult) ? queryResult : Array.isArray(queryResult?.documents) ? queryResult.documents : [])
-                                .slice()
-                                .sort((a: any, b: any) => getDocumentTimestampMs(b) - getDocumentTimestampMs(a))
-                            ).map((doc: any, idx: number) => {
-                              const docKey = String(doc?.id ?? doc?._rid ?? idx);
-                              return (
-                                <ListItemButton
-                                  key={docKey}
-                                  selected={selectedDocKey === docKey}
-                                  onClick={() => {
-                                    setSelectedNodeData(doc);
-                                    setSelectedDocKey(docKey);
-                                    setTabIndex(2);
-                                  }}
-                                  sx={{
-                                    borderRadius: 0,
-                                    py: 0.75,
-                                    px: 1,
-                                    transition: 'background-color 120ms ease',
-                                    borderBottom: '1px solid',
-                                    borderBottomColor: themeMode === 'dark' ? '#2f333b' : '#e0e0e0',
-                                    '&:last-of-type': { borderBottom: 'none' },
-                                    '&.Mui-selected': {
-                                      bgcolor: '#66bb6a',
-                                      color: '#ffffff',
-                                      borderBottomColor: '#2e7d32',
-                                    },
-                                    '&.Mui-selected:hover': {
-                                      bgcolor: '#5aae5f',
-                                    },
-                                  }}
-                                >
-                                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
-                                      <Typography variant="caption" sx={{ minWidth: 18, textAlign: 'right', color: 'inherit', opacity: 0.9 }}>
-                                        {idx + 1}.
-                                      </Typography>
-                                      <Typography 
-                                        variant="body2" 
-                                        sx={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'inherit' }}
-                                      >
-                                        {doc?.id ?? `(no id)`}
-                                      </Typography>
-                                    </Box>
-                                    <Typography variant="caption" color="text.secondary" sx={{ ml: 2, whiteSpace: 'nowrap' }}>
-                                      {(() => {
-                                        const ts = doc?._ts ? Number(doc._ts) * 1000 : (doc?.createdAt ? Date.parse(doc.createdAt) : NaN);
-                                        return isNaN(ts) ? '' : formatRelativeTime(ts);
-                                      })()}
-                                    </Typography>
-                                  </Box>
-                                </ListItemButton>
-                              );
-                            })}
-                          </List>
-                          </Box>
-                        </Box>
-                      </Box>
+                      <NoSqlResultsList
+                        queryResult={queryResult}
+                        selectedDocKey={selectedDocKey}
+                        setSelectedDocKey={setSelectedDocKey}
+                        setSelectedNodeData={setSelectedNodeData}
+                        setTabIndex={setTabIndex}
+                        themeMode={themeMode}
+                      />
                     ) : (
                       <GraphViewer
                         data={queryResult}
@@ -1140,6 +1037,11 @@ export default function Home() {
             setOpen={setConsoleOpen}
             logContainerRef={logContainerRef as React.RefObject<HTMLDivElement>}
             themeMode={themeMode}
+            gremlinHistory={gremlinHistory}
+            nosqlHistory={nosqlHistory}
+            onPickHistory={(q: string) => setQuery(q)}
+            activeTab={consoleActiveTab}
+            setActiveTab={setConsoleActiveTab}
           />
         </Box>
       </ErrorBoundary>

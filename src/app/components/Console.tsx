@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, Typography, Collapse, IconButton } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Typography, Collapse, IconButton, Tabs, Tab, Button } from '@mui/material';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -25,6 +25,11 @@ interface ConsoleProps {
   setOpen: (open: boolean) => void;
   logContainerRef: React.RefObject<HTMLDivElement>;
   themeMode?: 'light' | 'dark';
+  gremlinHistory?: string[];
+  nosqlHistory?: string[];
+  activeTab?: 'console' | 'history-gremlin' | 'history-nosql';
+  setActiveTab?: (tab: 'console' | 'history-gremlin' | 'history-nosql') => void;
+  onPickHistory?: (q: string) => void;
 }
 
 const Console: React.FC<ConsoleProps> = ({
@@ -35,7 +40,19 @@ const Console: React.FC<ConsoleProps> = ({
   setOpen,
   logContainerRef,
   themeMode = 'light',
+  gremlinHistory = [],
+  nosqlHistory = [],
+  activeTab: controlledTab,
+  setActiveTab,
+  onPickHistory,
 }) => {
+  const [internalTab, setInternalTab] = useState<'console' | 'history-gremlin' | 'history-nosql'>('console');
+  const activeTab = controlledTab ?? internalTab;
+  const handleTabChange = (_: any, value: number) => {
+    const tabVal: 'console' | 'history-gremlin' | 'history-nosql' = value === 0 ? 'console' : value === 1 ? 'history-gremlin' : 'history-nosql';
+    if (setActiveTab) setActiveTab(tabVal);
+    else setInternalTab(tabVal);
+  };
   if (!open) {
     // Render a small header at the bottom to open the console
     return (
@@ -118,28 +135,37 @@ const Console: React.FC<ConsoleProps> = ({
             {logs.length} log{logs.length !== 1 ? 's' : ''}
           </Typography>
         </Box>
-        <IconButton size="small" sx={{ color: themeMode === 'dark' ? '#e0e0e0' : '#222', p: 0.25 }}>
-          <ExpandLessIcon fontSize="small" />
-        </IconButton>
+        <Box onClick={(e) => e.stopPropagation()} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tabs value={activeTab === 'console' ? 0 : activeTab === 'history-gremlin' ? 1 : 2} onChange={handleTabChange} sx={{ minHeight: 30, '& .MuiTab-root': { minHeight: 30, fontSize: 12 } }}>
+            <Tab label="Console" />
+            <Tab label="Graph History" />
+            <Tab label="NoSQL History" />
+          </Tabs>
+          <IconButton size="small" sx={{ color: themeMode === 'dark' ? '#e0e0e0' : '#222', p: 0.25 }}>
+            <ExpandLessIcon fontSize="small" />
+          </IconButton>
+        </Box>
       </Box>
-      <Box
-        ref={logContainerRef}
-        sx={{
-          background: themeMode === 'dark' ? '#23272f' : '#fafafa',
-          color: themeMode === 'dark' ? '#e0e0e0' : '#222',
-          maxHeight: 260,
-          overflowY: 'auto',
-          borderBottomLeftRadius: 8,
-          borderBottomRightRadius: 8,
-          px: 2,
-          py: 1,
-          fontSize: 13,
-        }}
-      >
-        {logs.length === 0 ? (
-          <Typography color={themeMode === 'dark' ? '#888' : 'text.secondary'}>No logs yet.</Typography>
-        ) : (
-          [...logs].sort((a, b) => Number(b.id) - Number(a.id)).map((log, idx) => {
+      {/* Tabs moved inline into header */}
+      {activeTab === 'console' && (
+        <Box
+          ref={logContainerRef}
+          sx={{
+            background: themeMode === 'dark' ? '#23272f' : '#fafafa',
+            color: themeMode === 'dark' ? '#e0e0e0' : '#222',
+            maxHeight: 260,
+            overflowY: 'auto',
+            borderBottomLeftRadius: 8,
+            borderBottomRightRadius: 8,
+            px: 2,
+            py: 1,
+            fontSize: 13,
+          }}
+        >
+          {logs.length === 0 ? (
+            <Typography color={themeMode === 'dark' ? '#888' : 'text.secondary'}>No logs yet.</Typography>
+          ) : (
+            [...logs].sort((a, b) => Number(b.id) - Number(a.id)).map((log, idx) => {
             const hasDetails = log.query || log.details;
             const isExpanded = expandedLogId === log.id;
             return (
@@ -241,9 +267,48 @@ const Console: React.FC<ConsoleProps> = ({
                 </Collapse>
               </Box>
             );
-          })
-        )}
-      </Box>
+            })
+          )}
+        </Box>
+      )}
+      {activeTab !== 'console' && (
+        <Box sx={{
+          background: themeMode === 'dark' ? '#23272f' : '#fafafa',
+          color: themeMode === 'dark' ? '#e0e0e0' : '#222',
+          maxHeight: 260,
+          overflowY: 'auto',
+          borderBottomLeftRadius: 8,
+          borderBottomRightRadius: 8,
+          px: 2,
+          py: 1,
+          fontSize: 13,
+        }}>
+          {activeTab === 'history-gremlin' && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {gremlinHistory.map((q: string, i: number) => (
+                <Button key={q + i} size="small" variant="outlined" color="secondary" sx={{ fontFamily: 'monospace', textTransform: 'none', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => onPickHistory && onPickHistory(q)}>
+                  {q.length > 80 ? q.slice(0, 77) + '...' : q}
+                </Button>
+              ))}
+              {gremlinHistory.length === 0 && (
+                <Typography color={themeMode === 'dark' ? '#888' : 'text.secondary'}>No graph query history.</Typography>
+              )}
+            </Box>
+          )}
+          {activeTab === 'history-nosql' && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {nosqlHistory.map((q: string, i: number) => (
+                <Button key={q + i} size="small" variant="outlined" color="secondary" sx={{ fontFamily: 'monospace', textTransform: 'none', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => onPickHistory && onPickHistory(q)}>
+                  {q.length > 80 ? q.slice(0, 77) + '...' : q}
+                </Button>
+              ))}
+              {nosqlHistory.length === 0 && (
+                <Typography color={themeMode === 'dark' ? '#888' : 'text.secondary'}>No NoSQL query history.</Typography>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
     </Box>
   );
 };

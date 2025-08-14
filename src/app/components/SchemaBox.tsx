@@ -20,46 +20,65 @@ const SchemaBox: React.FC<SchemaBoxProps> = ({ schema }) => {
   // Check if this is a NoSQL schema
   if (schema.collections) {
     return (
-      <div>
-        <Typography variant="h6" gutterBottom>
-          NoSQL Database Schema
-        </Typography>
+      <>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>Metadata</Typography>
+        <Box component="ul" sx={{ pl: 2, mb: 0 }}>
         {schema.database && (
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Database: {schema.database}
-          </Typography>
+          <li>
+            <Typography variant="body2">
+              <strong>Database:</strong> {schema.database}
+            </Typography>
+          </li>
         )}
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="subtitle1">Collections</Typography>
-                <Divider sx={{ my: 1 }} />
-                <Box component="ul" sx={{ pl: 2, mb: 0 }}>
-                  {schema.collections.map((collection, index) => (
-                    <li key={collection.id || index}>
-                      <Typography variant="body2">
-                        <strong>{collection.id}</strong>
-                        {collection.partitionKey && ` - Partition Key: ${collection.partitionKey}`}
-                        {collection.documentCount && ` - Documents: ${collection.documentCount}`}
-                      </Typography>
-                    </li>
-                  ))}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </div>
+        {schema.collections.map((collection, index) => (
+          <li key={collection.id || index}>
+            <Box component="ul" sx={{ pl: 2, mb: 1 }}>
+              {collection.id && (
+                <li>
+                  <Typography variant="body2"><strong>Collection:</strong> {collection.id}</Typography>
+                </li>
+              )}
+              {collection.partitionKey && (
+                <li>
+                  <Typography variant="body2"><strong>Partition Key:</strong> {collection.partitionKey}</Typography>
+                </li>
+              )}
+              {collection.indexingPolicy && (
+                <li>
+                  <Typography variant="body2"><strong>Indexing:</strong> {collection.indexingPolicy}</Typography>
+                </li>
+              )}
+              {typeof collection.ttl !== 'undefined' && collection.ttl !== null && (
+                <li>
+                  <Typography variant="body2"><strong>TTL:</strong> {String(collection.ttl)}</Typography>
+                </li>
+              )}
+              {Array.isArray(collection.uniqueKeys) && collection.uniqueKeys.length > 0 && (
+                <li>
+                  <Typography variant="body2"><strong>Unique Keys:</strong> {collection.uniqueKeys.join(', ')}</Typography>
+                </li>
+              )}
+              {collection.throughput && (collection.throughput.rus || collection.throughput.autoscaleMaxRus) && (
+                <li>
+                  <Typography variant="body2">
+                    <strong>Throughput:</strong>
+                    {collection.throughput.rus ? ` ${collection.throughput.rus} RU/s` : ''}
+                    {collection.throughput.autoscaleMaxRus ? ` (autoscale max ${collection.throughput.autoscaleMaxRus} RU/s)` : ''}
+                  </Typography>
+                </li>
+              )}
+            </Box>
+          </li>
+        ))}
+        </Box>
+      </>
     );
   }
 
   // Graph database schema
   return (
     <div>
-      <Typography variant="h6" gutterBottom>
-        Graph Database Schema
-      </Typography>
+     
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
           <Card variant="outlined">
@@ -87,6 +106,7 @@ const SchemaBox: React.FC<SchemaBoxProps> = ({ schema }) => {
             </CardContent>
           </Card>
         </Grid>
+       
       </Grid>
     </div>
   );
