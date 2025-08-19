@@ -9,6 +9,7 @@ export interface Connection {
   id: string;
   name: string;
   type: ConnectionType;
+  isProd?: boolean; // true => prod, false/undefined => non-prod
   details: {
     url: string;
     accessKey?: string;      // For Cosmos DB

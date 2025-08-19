@@ -1,7 +1,8 @@
 import React from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type { editor as MonacoEditorType, Position as MonacoPosition } from 'monaco-editor';
-import { Box, Button, CircularProgress, Alert } from '@mui/material';
+import { Box, Button, CircularProgress, Alert, Tooltip, Typography } from '@mui/material';
+import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
 
 interface QueryBoxProps {
   query: string;
@@ -32,12 +33,6 @@ const QueryBox: React.FC<QueryBoxProps> = ({
   return (
     <Box component="form" onSubmit={executeQuery} sx={{ width: '100%', background: themeMode === 'dark' ? '#23272f' : '#fff', color: themeMode === 'dark' ? '#e0e0e0' : '#222', borderRadius: 2 }}>
       <Box sx={{ width: '100%', height: connectionType === 'cosmos-nosql' ? 150 : 220, mb: connectionType === 'cosmos-nosql' ? 1 : 2 }}>
-        {connectionType !== 'cosmos-nosql' && (
-          <Box sx={{ mb: 0.5, color: 'text.secondary', fontSize: 12 }}>
-            Press Ctrl/Cmd + H to open history
-          </Box>
-        )}
-        {connectionType === 'cosmos-nosql' && null}
         <MonacoEditor
           width="100%"
           height="100%"
@@ -214,9 +209,24 @@ const QueryBox: React.FC<QueryBoxProps> = ({
         />
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
-        <Button type="submit" variant="contained" color="primary" disabled={queryLoading} sx={{ mt: 2, minWidth: 120 }}>
-          {queryLoading ? <CircularProgress size={20} /> : 'Run Query'}
-        </Button>
+        <Tooltip title="Ctrl/Cmd + Enter" arrow>
+          <span>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              disabled={queryLoading}
+              sx={{ mt: 2, minWidth: 140, display: 'inline-flex', alignItems: 'center', gap: 1 }}
+              startIcon={!queryLoading ? <KeyboardReturnIcon fontSize="small" /> : undefined}
+            >
+              {queryLoading ? (
+                <CircularProgress size={20} />
+              ) : (
+                <Typography component="span" sx={{ fontWeight: 600 }}>Run Query</Typography>
+              )}
+            </Button>
+          </span>
+        </Tooltip>
       </Box>
       {queryError && <Alert severity="error" sx={{ mt: 2 }}>{queryError}</Alert>}
     </Box>

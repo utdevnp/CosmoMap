@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Button, Typography, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Box, Button, Typography, TextField, FormControl, InputLabel, Select, MenuItem, FormControlLabel, Checkbox } from '@mui/material';
 import { ConnectionType } from '../../utils/connectionStorage';
 
 interface ConnectionFormProps {
@@ -223,6 +223,18 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({ mode, conn, setConn, on
           />
         </>
       ) : null}
+      {/* Environment flag: compact, default Prod; checked = Non Prod (inverts isProd) */}
+      <FormControlLabel
+        sx={{ mt: -0.5, alignSelf: 'flex-start', '& .MuiFormControlLabel-label': { fontSize: 12 } }}
+        control={
+          <Checkbox
+            size="small"
+            checked={!Boolean(conn.isProd ?? true)}
+            onChange={e => setConn({ ...conn, isProd: !e.target.checked })}
+          />
+        }
+        label="Non Prod"
+      />
       
       <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
         <Button type="submit" variant="contained" color="primary" size="small" sx={{ minWidth: 0 }}>

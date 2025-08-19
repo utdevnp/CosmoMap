@@ -24,7 +24,8 @@ import {
   Tabs,
   Tab,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Chip
 } from '@mui/material';
 import List from '@mui/material/List';
 import NoSqlResultsList from './components/nosql/NoSqlResultsList';
@@ -57,6 +58,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import Console from './components/Console';
 import ErrorBoundary from './components/ErrorBoundary';
 import ConnectionForm from './components/ConnectionForm';
+import AppDrawer from './components/shared/AppDrawer';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
@@ -171,6 +173,7 @@ export default function Home() {
     dbName: '',
     graphName: '',
     collectionName: '',
+    isProd: true,
   });
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
@@ -275,7 +278,7 @@ export default function Home() {
       
       // Update query based on connection type
       if (selectedConnection.type === 'cosmos-nosql') {
-        setQuery("SELECT * FROM c");
+        setQuery("SELECT * FROM c OFFSET 0 LIMIT 10");
       } else {
         setQuery('g.E().limit(10)');
       }
@@ -401,6 +404,32 @@ export default function Home() {
   const executeQuery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedConnection) return;
+    // Safe mode enforcement
+    if (safeMode) {
+      const q = (query || '').trim().toLowerCase();
+      if (selectedConnection.type === 'cosmos-nosql') {
+        // Only allow SELECT queries in safe mode
+        if (!q.startsWith('select')) {
+          setQueryError('unable to run query due to safe mode enable');
+          return;
+        }
+      } else {
+        // Block destructive or update-like gremlin operations
+        const blockedPatterns = [
+          /\bdrop\b/,
+          /\baddv\s*\(/,
+          /\badde\s*\(/,
+          /\bproperty\s*\(/,
+          /\bremove\w*\b/,
+          /\bset\w*\b/,
+          /\bmerge\w*\b/,
+        ];
+        if (blockedPatterns.some((re) => re.test(q))) {
+          setQueryError('unable to run query due to safe mode enable');
+          return;
+        }
+      }
+    }
     setQueryLoading(true);
     setQueryError(null);
     setQueryResult(null);
@@ -562,6 +591,7 @@ export default function Home() {
       id: uuidv4(),
       name: newConn.name,
       type: newConn.type,
+      isProd: newConn.isProd ?? true,
       details: (() => {
         switch (newConn.type) {
           case 'local-graph':
@@ -578,7 +608,7 @@ export default function Home() {
     saveConnection(conn);
     setConnections(getConnections());
     setAddMode(false);
-    setNewConn({ name: '', type: 'local-graph', url: '', accessKey: '', dbName: '', graphName: '', collectionName: '' });
+    setNewConn({ name: '', type: 'local-graph', url: '', accessKey: '', dbName: '', graphName: '', collectionName: '', isProd: true });
   };
 
   const [editConnId, setEditConnId] = useState<string | null>(null);
@@ -599,6 +629,7 @@ export default function Home() {
       id: editConnId,
       name: editConn.name,
       type: editConn.type,
+      isProd: editConn.isProd ?? true,
       details: (() => {
         switch (editConn.type) {
           case 'local-graph':
@@ -697,6 +728,17 @@ export default function Home() {
   };
 
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light'); // Default to light mode
+  // Safe Mode: default ON and persisted
+  const [safeMode, setSafeMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('safeMode');
+      if (v === 'true' || v === 'false') return v === 'true';
+    }
+    return true; // default ON
+  });
+  useEffect(() => {
+    localStorage.setItem('safeMode', String(safeMode));
+  }, [safeMode]);
   const theme = useMemo(() => themeMode === 'dark'
     ? createTheme({
         palette: {
@@ -806,11 +848,43 @@ export default function Home() {
                         value={selectedConnectionId || ''}
                         label="Connection"
                         onChange={e => setSelectedConnectionId(e.target.value)}
+                        renderValue={(val) => {
+                          const conn = connections.find(c => c.id === val);
+                          if (!conn) return '';
+                          return (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                              <Typography sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {conn.name}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label={(conn.isProd !== false) ? 'Prod' : 'Non Prod'}
+                                color={(conn.isProd !== false) ? 'error' : 'default'}
+                                sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: 10, lineHeight: '18px' } }}
+                              />
+                            </Box>
+                          );
+                        }}
                       >
                         <MenuItem value="">Select Connection</MenuItem>
                         {connections.map(conn => (
                           <MenuItem key={conn.id} value={conn.id}>
-                            {conn.name} ({conn.type})
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, width: '100%' }}>
+                              <Typography sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {conn.name}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                label={(conn.isProd !== false) ? 'Prod' : 'Non Prod'}
+                                color={(conn.isProd !== false) ? 'error' : 'default'}
+                                sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: 10, lineHeight: '18px' } }}
+                              />
+                              <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                {conn.type}
+                              </Typography>
+                            </Box>
                           </MenuItem>
                         ))}
                       </Select>
@@ -829,99 +903,29 @@ export default function Home() {
               </Box>
             </Toolbar>
           </AppBar>
-          {/* Drawer for connection management */}
-          <Drawer
-            anchor="left"
+          <AppDrawer
             open={drawerOpen}
             onClose={() => setDrawerOpen(false)}
-            sx={{
-              '& .MuiDrawer-paper': {
-                backgroundColor: themeMode === 'dark' ? '#23272f' : '#fff',
-                color: themeMode === 'dark' ? '#e0e0e0' : '#222',
-              },
-            }}
-          >
-            <Box sx={{ width: 340, p: 3 ,  mt: 2 }}>
-              <Typography variant="h6" gutterBottom sx={{ color: themeMode === 'dark' ? '#e0e0e0' : '#222' }}>Connections</Typography>
-              {/* Connection list */}
-              <Box sx={{ mt: 2 }}>
-                {connections.length === 0 ? (
-                  <Typography color="text.secondary">No connections saved.</Typography>
-                ) : (
-                  connections.map((conn) => (
-                    <Box
-                      key={conn.id}
-                      sx={{
-                        mb: 1.5,
-                        p: 1.5,
-                        borderRadius: 1,
-                        background: themeMode === 'dark' ? '#181a20' : '#f5f5f5',
-                        color: themeMode === 'dark' ? '#e0e0e0' : '#222',
-                        fontFamily: 'monospace',
-                        fontSize: 15,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        transition: 'background 0.2s',
-                        cursor: 'pointer',
-                        '&:hover': { background: themeMode === 'dark' ? '#23272f' : '#ececec' },
-                      }}
-                    >
-                      <Box>
-                        <Typography fontWeight={600}>{conn.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{conn.type}</Typography>
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button size="small" variant="outlined" color="primary" onClick={() => handleEditConnection(conn)} aria-label="Edit connection" sx={{ minWidth: 0, p: 0.5 }}>
-                          <EditIcon fontSize="small" sx={{ fontSize: 16 }} />
-                        </Button>
-                        <Button size="small" variant="outlined" color="error" onClick={() => handleDeleteConnection(conn.id)} aria-label="Delete connection" sx={{ minWidth: 0, p: 0.5 }}>
-                          <DeleteIcon fontSize="small" sx={{ fontSize: 16 }} />
-                        </Button>
-                      </Box>
-                    </Box>
-                  ))
-                )}
-              </Box>
-              {addMode ? (
-                <ConnectionForm
-                  mode="add"
-                  conn={newConn}
-                  setConn={setNewConn}
-                  onSave={handleAddConnection}
-                  onCancel={() => setAddMode(false)}
-                />
-              ) : editConnId ? (
-                <Box sx={{ width: '100%', maxWidth: '100%' }}>
-                  <ConnectionForm
-                    mode="edit"
-                    conn={editConn}
-                    setConn={setEditConn}
-                    onSave={handleSaveEditConnection}
-                    onCancel={handleCancelEdit}
-                  />
-                </Box>
-              ) : (
-                <Button variant="contained" color="primary" fullWidth onClick={() => setAddMode(true)}>
-                  + Add Connection
-                </Button>
-              )}
-              {/* Settings section */}
-              <Box sx={{ mt: 4, borderTop: '1px solid #eee', pt: 2 }}>
-                <Typography variant="subtitle1" sx={{ mb: 1 }}>Settings</Typography>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={showNodeTooltips}
-                      onChange={e => setShowNodeTooltips(e.target.checked)}
-                      color="primary"
-                    />
-                  }
-                  label="Show Node Tooltips"
-                />
-              </Box>
-            </Box>
-          </Drawer>
+            themeMode={themeMode}
+            connections={connections}
+            onEditConnection={handleEditConnection}
+            onDeleteConnection={handleDeleteConnection}
+            addMode={addMode}
+            setAddMode={setAddMode}
+            newConn={newConn}
+            setNewConn={setNewConn}
+            onSaveNewConnection={handleAddConnection}
+            editConnId={editConnId}
+            editConn={editConn}
+            setEditConn={setEditConn}
+            onSaveEditConnection={handleSaveEditConnection}
+            onCancelEdit={handleCancelEdit}
+            showNodeTooltips={showNodeTooltips}
+            setShowNodeTooltips={(v: boolean) => setShowNodeTooltips(v)}
+            safeMode={safeMode}
+            setSafeMode={(v: boolean) => setSafeMode(v)}
+            selectedIsProd={Boolean(selectedConnection?.isProd ?? true)}
+          />
           <Box sx={{ p:4, height: 'calc(100vh - 88px)', background: themeMode === 'dark' ? '#181a20' : '#fafbfc', color: themeMode === 'dark' ? '#e0e0e0' : '#222' }}>
             <Grid container spacing={2} sx={{ height: '100%' }}>
               <Grid item xs={6} md={6} sx={{ height: '100%' }}>
@@ -931,6 +935,9 @@ export default function Home() {
                   <Typography variant="h6" gutterBottom>
                     Query Editor
                   </Typography>
+                  <Box sx={{ mb: 1, color: 'text.secondary', fontSize: 12 }}>
+                    Press Ctrl/Cmd + H to open history
+                  </Box>
                   {/* Inline history removed; use bottom Console tabs (Ctrl/Cmd+H) */}
                   <QueryBox
                     query={query}

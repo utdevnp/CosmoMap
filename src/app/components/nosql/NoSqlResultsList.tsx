@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, List, ListItemButton, Typography } from '@mui/material';
+import { Box, List, ListItemButton, Typography, FormControl, Select, MenuItem, InputLabel, Pagination } from '@mui/material';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -60,8 +60,68 @@ const NoSqlResultsList: React.FC<NoSqlResultsListProps> = ({
 
   const sortedDocs = docs.slice().sort((a, b) => getDocumentTimestampMs(b) - getDocumentTimestampMs(a));
 
+  // Pagination state and derived values
+  const [pageSize, setPageSize] = React.useState<number>(25);
+  const [page, setPage] = React.useState<number>(1);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [queryResult, pageSize]);
+
+  // Clamp page size to a maximum of 50 in case of stale values
+  React.useEffect(() => {
+    if (pageSize > 50) setPageSize(50);
+  }, [pageSize]);
+
+  const totalDocs = sortedDocs.length;
+  const totalPages = Math.max(1, Math.ceil(totalDocs / pageSize));
+  const startIndex = (page - 1) * pageSize;
+  const currentDocs = sortedDocs.slice(startIndex, startIndex + pageSize);
+
   return (
     <Box sx={{ p: 2 }}>
+      {/* Header controls outside the list (right-aligned dropdown) */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="caption" sx={{ color: themeMode === 'dark' ? '#b0b0b0' : '#666' }}>
+          {totalDocs === 0 ? 'No documents' : `Showing ${startIndex + 1}–${Math.min(startIndex + pageSize, totalDocs)} of ${totalDocs}`}
+        </Typography>
+        <FormControl size="small" sx={{ minWidth: 120 }}>
+          <InputLabel id="page-size-label">Items per page</InputLabel>
+          <Select
+            labelId="page-size-label"
+            id="page-size-select"
+            value={String(pageSize)}
+            label="Items per page"
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setPageSize(next);
+              setPage(1);
+            }}
+            sx={{
+              '& .MuiSelect-select': {
+                py: 0.25,
+                px: 1,
+                fontSize: 12,
+              },
+            }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  '& .MuiMenuItem-root': {
+                    minHeight: 28,
+                    py: 0.25,
+                    fontSize: 12,
+                  },
+                },
+              },
+            }}
+          >
+            <MenuItem value={"10"}>10</MenuItem>
+            <MenuItem value={"25"}>25</MenuItem>
+            <MenuItem value={"50"}>50</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
       <Box sx={{
         bgcolor: themeMode === 'dark' ? '#23272f' : '#fff',
         border: '1px solid',
@@ -71,7 +131,7 @@ const NoSqlResultsList: React.FC<NoSqlResultsListProps> = ({
       }}>
         <Box sx={{ maxHeight: '100vh', overflow: 'auto' }}>
           <List dense sx={{ p: 0 }}>
-            {sortedDocs.map((doc, idx) => {
+            {currentDocs.map((doc, idx) => {
               const docKey = String(doc?.id ?? doc?._rid ?? idx);
               return (
                 <ListItemButton
@@ -103,7 +163,7 @@ const NoSqlResultsList: React.FC<NoSqlResultsListProps> = ({
                   <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
                       <Typography variant="caption" sx={{ minWidth: 18, textAlign: 'right', color: 'inherit', opacity: 0.9 }}>
-                        {idx + 1}.
+                        {startIndex + idx + 1}.
                       </Typography>
                       <Typography
                         variant="body2"
@@ -125,6 +185,32 @@ const NoSqlResultsList: React.FC<NoSqlResultsListProps> = ({
           </List>
         </Box>
       </Box>
+      {/* Footer pagination outside the list (right-aligned) */}
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mt: 1 }}>
+          <Pagination
+            color="primary"
+            size="small"
+            variant="outlined"
+            count={totalPages}
+            page={Math.min(page, totalPages)}
+            onChange={(_, value) => setPage(value)}
+            showFirstButton
+            showLastButton
+            sx={{
+              '& .MuiPaginationItem-root': {
+                borderRadius: 0,
+                minWidth: 28,
+                height: 28,
+                fontSize: 12,
+              },
+              '& .MuiPaginationItem-outlined': {
+                borderColor: themeMode === 'dark' ? '#2f333b' : '#e0e0e0',
+              },
+            }}
+          />
+        </Box>
+      )}
     </Box>
   );
 };
