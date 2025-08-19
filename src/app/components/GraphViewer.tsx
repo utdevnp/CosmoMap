@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import CytoscapeComponent from 'react-cytoscapejs';
 import { CircularProgress, Alert, Box, Button, Stack, IconButton, Tooltip, FormControl, Select, MenuItem, InputLabel } from '@mui/material';
+import ZoomInIcon from '@mui/icons-material/ZoomIn';
+import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 
 interface GraphViewerProps {
   data: any;
@@ -249,7 +251,7 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
       const options: any = { name: isBreadth ? 'breadthfirst' : layoutName, padding: 60 };
       if (isBreadth) {
         options.directed = true;
-        options.spacingFactor = 1.1;
+        options.spacingFactor = 1.4; // more visible gaps in tree
         options.fit = true;
         // Swap x/y to get a top-to-bottom tree
         options.transform = (_node: any, pos: any) => ({ x: pos.y, y: pos.x });
@@ -299,17 +301,23 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-        <Button variant="outlined" size="small" onClick={handleResetView}>
+        <Button variant="outlined" size="small" onClick={handleResetView} sx={{ height: 32 }}>
           Reset View
         </Button>
-        <FormControl size="small" sx={{ minWidth: 130, ml: 1 }}>
+        <Tooltip title="Zoom In">
+          <IconButton size="small" onClick={handleZoomIn}><ZoomInIcon /></IconButton>
+        </Tooltip>
+        <Tooltip title="Zoom Out">
+          <IconButton size="small" onClick={handleZoomOut}><ZoomOutIcon /></IconButton>
+        </Tooltip>
+        <FormControl size="small" sx={{ ml: 1 }}>
           <InputLabel id="layout-select-label" sx={{ fontSize: 12 }}>Layout</InputLabel>
           <Select
             labelId="layout-select-label"
             value={layoutName}
             label="Layout"
             onChange={(e) => setLayoutName(e.target.value as any)}
-            sx={{ '& .MuiSelect-select': { py: 0.25, px: 1, fontSize: 12 } }}
+            sx={{ '& .MuiSelect-select': { py: 0.25, px: 1, fontSize: 12, height: 32, display: 'flex', alignItems: 'center' } }}
             MenuProps={{
               PaperProps: { sx: { '& .MuiMenuItem-root': { minHeight: 28, py: 0.25, fontSize: 12 } } }
             }}
@@ -321,7 +329,7 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
       </Stack>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <CytoscapeComponent
-          cy={(cy: any) => { cyRef.current = cy; try { cy.userZoomingEnabled(false); } catch {} }}
+          cy={(cy: any) => { cyRef.current = cy; try { cy.userZoomingEnabled(true); } catch {} }}
           elements={elements}
           style={{ width: '100%', height: '100%', background: isDarkMode ? '#181a20' : '#fafbfc' }}
           layout={{ name: (layoutName === 'breadthfirst-vertical' ? 'breadthfirst' : layoutName), padding: 60 }}
