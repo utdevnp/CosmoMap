@@ -69,7 +69,7 @@ const NoSqlResultsList: React.FC<NoSqlResultsListProps> = ({
         borderRadius: 1,
         boxShadow: 'none',
       }}>
-        <Box sx={{ maxHeight: '70vh', overflow: 'auto' }}>
+        <Box sx={{ maxHeight: '100vh', overflow: 'auto' }}>
           <List dense sx={{ p: 0 }}>
             {sortedDocs.map((doc, idx) => {
               const docKey = String(doc?.id ?? doc?._rid ?? idx);
