@@ -25,6 +25,8 @@ import {
   Tab,
   Switch,
   FormControlLabel,
+  Tooltip,
+  Fab,
   Chip
 } from '@mui/material';
 import List from '@mui/material/List';
@@ -64,6 +66,10 @@ import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import NodeDataTab from './components/NodeDataTab';
 import QueryResultTab from './components/QueryResultTab';
+import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
+import CodeIcon from '@mui/icons-material/Code';
+import SchemaIcon from '@mui/icons-material/Schema';
 const ReactJson = dynamic(() => import('react-json-view'), { ssr: false });
 
 const DEFAULT_SERVER_URL = 'ws://localhost:8182/gremlin';
@@ -410,7 +416,7 @@ export default function Home() {
       if (selectedConnection.type === 'cosmos-nosql') {
         // Only allow SELECT queries in safe mode
         if (!q.startsWith('select')) {
-          setQueryError('unable to run query due to safe mode enable');
+          setQueryError('Write protection is enable. See settings');
           return;
         }
       } else {
@@ -425,7 +431,7 @@ export default function Home() {
           /\bmerge\w*\b/,
         ];
         if (blockedPatterns.some((re) => re.test(q))) {
-          setQueryError('unable to run query due to safe mode enable');
+          setQueryError('Write protection is enable. See settings');
           return;
         }
       }
@@ -777,6 +783,8 @@ export default function Home() {
   }, [themeMode]);
 
   const [consoleActiveTab, setConsoleActiveTab] = useState<'console' | 'history-gremlin' | 'history-nosql'>('console');
+  // UI collapse/expand for left pane (query + tabs)
+  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(false);
 
   // Ctrl/Cmd + H: open console history for current connection type
   useEffect(() => {
@@ -813,7 +821,7 @@ export default function Home() {
                   <MenuIcon sx={{ color: themeMode === 'dark' ? '#e0e0e0' : 'black' }} />
                 </IconButton>
                 <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main', letterSpacing: 1 }}>
-                CosmoMap
+                CosmoXp
                 </Typography>
               </Box>
               {/* Theme switcher icon button before connection select */}
@@ -928,13 +936,18 @@ export default function Home() {
           />
           <Box sx={{ p:4, height: 'calc(100vh - 88px)', background: themeMode === 'dark' ? '#181a20' : '#fafbfc', color: themeMode === 'dark' ? '#e0e0e0' : '#222' }}>
             <Grid container spacing={2} sx={{ height: '100%' }}>
-              <Grid item xs={6} md={6} sx={{ height: '100%' }}>
+              <Grid item xs={leftCollapsed ? 0 : 6} md={leftCollapsed ? 0 : 6} sx={{ height: '100%', display: leftCollapsed ? 'none' : 'block' }}>
 
                 {/* Query Editor below header controls */}
-                <Paper elevation={3} sx={{ p: 3, mb: 4, background: themeMode === 'dark' ? '#23272f' : '#fff', color: themeMode === 'dark' ? '#e0e0e0' : '#222' }}>
+                <Paper elevation={3} sx={{ p: 3, mb: 4, position: 'relative', background: themeMode === 'dark' ? '#23272f' : '#fff', color: themeMode === 'dark' ? '#e0e0e0' : '#222' }}>
                   <Typography variant="h6" gutterBottom>
                     Query Editor
                   </Typography>
+                  <Tooltip title={leftCollapsed ? 'Expand panels' : 'Collapse panels'}>
+                    <IconButton size="small" onClick={() => setLeftCollapsed(v => !v)} sx={{ position: 'absolute', top: 8, right: 8 }}>
+                      {leftCollapsed ? <UnfoldMoreIcon /> : <UnfoldLessIcon />}
+                    </IconButton>
+                  </Tooltip>
                   <Box sx={{ mb: 1, color: 'text.secondary', fontSize: 12 }}>
                     Press Ctrl/Cmd + H to open history
                   </Box>
@@ -996,7 +1009,7 @@ export default function Home() {
                 </Box>
 
               </Grid>
-              <Grid item xs={6} md={6} sx={{ height: '100%' }}>
+              <Grid item xs={leftCollapsed ? 12 : 6} md={leftCollapsed ? 12 : 6} sx={{ height: '100%', position: 'relative' }}>
 
                 <Box sx={{ height: '100%' }}>
                   {queryLoading ? (
@@ -1030,7 +1043,20 @@ export default function Home() {
                     <Alert severity="info">No data to display.</Alert>
                   )}
                 </Box>
-
+                {leftCollapsed && (
+                  <Box sx={{ position: 'absolute', top: 100, left: 12, display: 'flex', flexDirection: 'column', gap: 1, zIndex: 10 }}>
+                    <Tooltip title="Show Query/Schema Panels">
+                      <Fab size="small" color="primary" onClick={() => setLeftCollapsed(false)}>
+                        <CodeIcon sx={{ fontSize: 18 }} />
+                      </Fab>
+                    </Tooltip>
+                    <Tooltip title="Show Schema Panel">
+                      <Fab size="small" onClick={() => setLeftCollapsed(false)}>
+                        <SchemaIcon sx={{ fontSize: 18 }} />
+                      </Fab>
+                    </Tooltip>
+                  </Box>
+                )}
               </Grid>
             </Grid>
 

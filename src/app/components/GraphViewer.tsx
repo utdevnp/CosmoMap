@@ -1,8 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import CytoscapeComponent from 'react-cytoscapejs';
-import { CircularProgress, Alert, Box, Button, Stack, IconButton, Tooltip } from '@mui/material';
-import ZoomInIcon from '@mui/icons-material/ZoomIn';
-import ZoomOutIcon from '@mui/icons-material/ZoomOut';
+import { CircularProgress, Alert, Box, Button, Stack, IconButton, Tooltip, FormControl, Select, MenuItem, InputLabel } from '@mui/material';
 
 interface GraphViewerProps {
   data: any;
@@ -132,7 +130,8 @@ const getElementsFromData = (data: any): any[] => {
       }
     };
   });
-  const edgeElements: any[] = edges.map((item: any) => {
+  // First, build raw edge elements
+  let edgeElements: any[] = edges.map((item: any) => {
     let source = item.outV !== undefined ? item.outV : item.source;
     let target = item.inV !== undefined ? item.inV : item.target;
     if (typeof source === 'object' && source && source.id) source = source.id;
@@ -149,6 +148,31 @@ const getElementsFromData = (data: any): any[] => {
       }
     };
   }).filter(edge => nodeIds.has(edge.data.source) && nodeIds.has(edge.data.target));
+  // Annotate paired directions to minimally separate bezier curves
+  const pairMap: Record<string, { hasAB: boolean; hasBA: boolean } > = {};
+  edgeElements.forEach((el) => {
+    const a = String(el.data.source);
+    const b = String(el.data.target);
+    const min = a < b ? a : b;
+    const max = a < b ? b : a;
+    const key = `${min}|${max}`;
+    if (!pairMap[key]) pairMap[key] = { hasAB: false, hasBA: false };
+    if (a === min && b === max) pairMap[key].hasAB = true; else pairMap[key].hasBA = true;
+  });
+  edgeElements = edgeElements.map((el) => {
+    const a = String(el.data.source);
+    const b = String(el.data.target);
+    const min = a < b ? a : b;
+    const max = a < b ? b : a;
+    const key = `${min}|${max}`;
+    const info = pairMap[key];
+    if (info && info.hasAB && info.hasBA) {
+      // Mark direction for paired edges
+      const pairedDir = (a === min && b === max) ? 'fwd' : 'rev';
+      return { ...el, data: { ...el.data, pairedDir } };
+    }
+    return el;
+  });
   return [...nodeElements, ...edgeElements];
 };
 
@@ -156,7 +180,6 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
   const elements = useMemo(() => {
     if (!data) return [];
     const result = getElementsFromData(data);
-    // Filter out any elements with missing id, source, or target
     return Array.isArray(result)
       ? result.filter(el => el && el.data && el.data.id && (el.data.source === undefined || el.data.source) && (el.data.target === undefined || el.data.target))
       : [];
@@ -165,6 +188,7 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
   const [hoveredNode, setHoveredNode] = useState<any>(null);
   const [hoveredPosition, setHoveredPosition] = useState<{ x: number; y: number } | null>(null);
   const [selectedElement, setSelectedElement] = useState<{ id: string; group: 'nodes' | 'edges' } | null>(null);
+  const [layoutName, setLayoutName] = useState<'cose' | 'breadthfirst-vertical'>('cose');
 
   // Auto-fit/center the graph on load or data change
   useEffect(() => {
@@ -207,12 +231,32 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
     cy.on('mouseover', 'node', handleMouseOver);
     cy.on('mouseout', 'node', handleMouseOut);
     cy.on('tap', 'node,edge', handleClick);
+    // When a node is moved (drag released), reveal reverse edges
+    // no reveal behavior
     return () => {
       cy.off('mouseover', 'node', handleMouseOver);
       cy.off('mouseout', 'node', handleMouseOut);
       cy.off('tap', 'node,edge', handleClick);
     };
   }, [cyRef.current, setSelectedNodeData, onNodeClick]); // Always 3 dependencies, same order
+
+  // Re-run layout when layoutName or elements change
+  useEffect(() => {
+    if (!cyRef.current) return;
+    const cy = cyRef.current;
+    try {
+      const isBreadth = layoutName === 'breadthfirst-vertical';
+      const options: any = { name: isBreadth ? 'breadthfirst' : layoutName, padding: 60 };
+      if (isBreadth) {
+        options.directed = true;
+        options.spacingFactor = 1.1;
+        options.fit = true;
+        // Swap x/y to get a top-to-bottom tree
+        options.transform = (_node: any, pos: any) => ({ x: pos.y, y: pos.x });
+      }
+      cy.layout(options).run();
+    } catch {}
+  }, [layoutName, elements]);
 
   const handleResetView = () => {
     if (cyRef.current) {
@@ -258,19 +302,29 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
         <Button variant="outlined" size="small" onClick={handleResetView}>
           Reset View
         </Button>
-        <Tooltip title="Zoom In">
-          <IconButton size="small" onClick={handleZoomIn}><ZoomInIcon /></IconButton>
-        </Tooltip>
-        <Tooltip title="Zoom Out">
-          <IconButton size="small" onClick={handleZoomOut}><ZoomOutIcon /></IconButton>
-        </Tooltip>
+        <FormControl size="small" sx={{ minWidth: 130, ml: 1 }}>
+          <InputLabel id="layout-select-label" sx={{ fontSize: 12 }}>Layout</InputLabel>
+          <Select
+            labelId="layout-select-label"
+            value={layoutName}
+            label="Layout"
+            onChange={(e) => setLayoutName(e.target.value as any)}
+            sx={{ '& .MuiSelect-select': { py: 0.25, px: 1, fontSize: 12 } }}
+            MenuProps={{
+              PaperProps: { sx: { '& .MuiMenuItem-root': { minHeight: 28, py: 0.25, fontSize: 12 } } }
+            }}
+          >
+            <MenuItem value={'cose'}>CoSE</MenuItem>
+            <MenuItem value={'breadthfirst-vertical'}>Tree (vertical)</MenuItem>
+          </Select>
+        </FormControl>
       </Stack>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <CytoscapeComponent
-          cy={(cy: any) => { cyRef.current = cy; }}
+          cy={(cy: any) => { cyRef.current = cy; try { cy.userZoomingEnabled(false); } catch {} }}
           elements={elements}
           style={{ width: '100%', height: '100%', background: isDarkMode ? '#181a20' : '#fafbfc' }}
-          layout={{ name: 'cose', padding: 60 }}
+          layout={{ name: (layoutName === 'breadthfirst-vertical' ? 'breadthfirst' : layoutName), padding: 60 }}
           stylesheet={[
             // Node: only show label (no id)
             {
@@ -285,8 +339,8 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
                 'font-size': 3,
                 'font-family': 'system-ui, sans-serif',
                 'font-weight': 700,
-                'width': 22,
-                'height': 22,
+                'width': 18,
+                'height': 18,
                 'shape': 'ellipse',
                 'color': '#fff',
                 'text-outline-width': 0,
@@ -329,7 +383,7 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
               selector: 'node.selected',
               style: {
                 'border-color': '#43a047',
-                'border-width': 3,
+                'border-width': 2,
                 'z-index': 20,
                 'shadow-blur': 64,
                 'shadow-color': '#43a047',
@@ -338,7 +392,7 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
                 'shadow-offset-y': 0,
               },
             },
-            // Edge: clean, thin, light, image-inspired, with fade-in, smaller font
+            // Edge: clean, thin, curved bezier
             {
               selector: 'edge',
               style: {
@@ -349,6 +403,10 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
                 'target-arrow-fill': 'filled',
                 'arrow-scale': 0.3,
                 'curve-style': 'bezier',
+                // Increase separation for paired opposite edges for better visibility
+                'control-point-distance': 16,
+                'control-point-weight': 0.5,
+                'control-point-step-size': 16,
                 label: 'data(label)',
                 'font-size': isDarkMode ? 4 : 4,
                 'font-family': 'system-ui, sans-serif',
@@ -367,6 +425,9 @@ const GraphViewer: React.FC<GraphViewerProps> = ({ data, loading, error, setSele
                 'transition-timing-function': 'ease',
               },
             },
+            // Slightly offset forward vs reverse edges of the same pair
+            { selector: 'edge[pairedDir = "fwd"]', style: { 'control-point-weight': 0.4 } },
+            { selector: 'edge[pairedDir = "rev"]', style: { 'control-point-weight': 0.6 } },
             // Edge: fade-in animation
             {
               selector: 'edge',
