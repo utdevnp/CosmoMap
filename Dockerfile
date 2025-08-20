@@ -2,24 +2,21 @@
 FROM node:18-alpine AS deps
 WORKDIR /app
 
-# Install yarn globally with npm registry configuration for CI
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm install -g yarn --network-timeout=100000
+# Install yarn directly using apk (Alpine's package manager)
+RUN apk add --no-cache yarn
 
 # Copy package files
 COPY package.json yarn.lock ./
 
-# Install dependencies using yarn with CI-friendly settings
-RUN yarn config set network-timeout 300000 && \
-    yarn install --frozen-lockfile --network-timeout 300000
+# Install dependencies using yarn
+RUN yarn install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM node:18-alpine AS builder
 WORKDIR /app
 
-# Install yarn globally for builder stage
-RUN npm config set registry https://registry.npmjs.org/ && \
-    npm install -g yarn --network-timeout=100000
+# Install yarn directly using apk
+RUN apk add --no-cache yarn
 
 # Copy package files and install dependencies
 COPY package.json yarn.lock ./
