@@ -16,6 +16,39 @@ Frustrated by the lack of a unified, intuitive solution, I decided to build my o
 
 ---
 
+## Quick Start
+
+### Using Docker (Recommended)
+
+```bash
+# Build and run with Docker
+docker build -t cosmoxp .
+docker run -p 3000:3000 cosmoxp
+
+# Or use the pre-built image
+docker run -p 3000:3000 ghcr.io/utdevnp/cosmoxp:latest
+```
+
+### Local Development
+
+```bash
+# Install dependencies
+npm install
+# or
+yarn install
+
+# Run development server
+npm run dev
+# or
+yarn dev
+
+# Build for production
+npm run build
+npm start
+```
+
+---
+
 ## Features
 
 ### Graph (Gremlin API) Features
@@ -51,14 +84,53 @@ Frustrated by the lack of a unified, intuitive solution, I decided to build my o
 ## Settings
 
 - **Connections**: Create, edit, or delete Gremlin and NoSQL connections. Values are encrypted in localStorage.
-- **Safe Mode (Write Protection)**: Default ON. Blocks dangerous queries; shows message “Write protection is enable. See settings”.
+- **Safe Mode (Write Protection)**: Default ON. Blocks dangerous queries; shows message "Write protection is enable. See settings".
 - **Tooltips**: Toggle node tooltips while exploring graphs.
 
 ## Controls
 
 - Run query: Ctrl/Cmd + Enter
 - Open history: Ctrl/Cmd + H
-- Reset view: “Reset View” button above the graph
+- Reset view: "Reset View" button above the graph
+
+## Docker
+
+### Multi-Platform Support
+
+CosmoXp Docker images support multiple platforms:
+- **Linux**: AMD64, ARM64
+- **macOS**: AMD64, ARM64 (Apple Silicon)
+
+### Building Locally
+
+```bash
+# Build for current platform
+docker build -t cosmoxp .
+
+# Build for specific platform
+docker build --platform linux/amd64 -t cosmoxp:linux-amd64 .
+docker build --platform linux/arm64 -t cosmoxp:linux-arm64 .
+docker build --platform darwin/amd64 -t cosmoxp:macos-amd64 .
+docker build --platform darwin/arm64 -t cosmoxp:macos-arm64 .
+
+# Build for all platforms
+docker buildx build --platform linux/amd64,linux/arm64,darwin/amd64,darwin/arm64 -t cosmoxp:multi .
+```
+
+### Running with Docker Compose
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  cosmoxp:
+    image: cosmoxp:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+```
 
 ## License
 
