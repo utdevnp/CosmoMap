@@ -1,5 +1,5 @@
 # Install dependencies only when needed
-FROM node:18-alpine AS deps
+FROM --platform=$BUILDPLATFORM node:18-alpine AS deps
 WORKDIR /app
 
 # Copy package files
@@ -11,7 +11,7 @@ RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
     else npm install; fi
 
 # Rebuild the source code only when needed
-FROM node:18-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:18-alpine AS builder
 WORKDIR /app
 
 # Copy package files and install dependencies

@@ -97,9 +97,10 @@ npm start
 
 ### Multi-Platform Support
 
-CosmoXp Docker images support multiple platforms:
+CosmoXp Docker images support multiple Linux platforms:
 - **Linux**: AMD64, ARM64
-- **macOS**: AMD64, ARM64 (Apple Silicon)
+
+> **Note**: While the Docker image is built for Linux, it can run on macOS and Windows using Docker Desktop, which provides Linux container compatibility.
 
 ### Building Locally
 
@@ -110,11 +111,9 @@ docker build -t cosmoxp .
 # Build for specific platform
 docker build --platform linux/amd64 -t cosmoxp:linux-amd64 .
 docker build --platform linux/arm64 -t cosmoxp:linux-arm64 .
-docker build --platform darwin/amd64 -t cosmoxp:macos-amd64 .
-docker build --platform darwin/arm64 -t cosmoxp:macos-arm64 .
 
-# Build for all platforms
-docker buildx build --platform linux/amd64,linux/arm64,darwin/amd64,darwin/arm64 -t cosmoxp:multi .
+# Build for all supported platforms
+docker buildx build --platform linux/amd64,linux/arm64 -t cosmoxp:multi .
 ```
 
 ### Running with Docker Compose
