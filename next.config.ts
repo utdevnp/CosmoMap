@@ -11,9 +11,6 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['@mui/material', '@mui/icons-material'],
   },
-  
-  // Disable telemetry
-  telemetry: false,
 };
 
 export default nextConfig;

@@ -32,11 +32,16 @@ export async function POST(req: NextRequest) {
       // Throughput (may be manual RU/s or autoscale)
       let throughput: { rus?: number; autoscaleMaxRus?: number } = {};
       try {
-        const tp = await container.readThroughput();
-        // tp.resource may include offerReplacePending, throughput, autoscaleSettings
-        const res: any = tp?.resource ?? {};
-        if (res.throughput) throughput.rus = Number(res.throughput);
-        if (res.autoscaleSettings?.maxThroughput) throughput.autoscaleMaxRus = Number(res.autoscaleSettings.maxThroughput);
+        // Get container offer to read throughput information
+        const { resource: offer } = await container.readOffer();
+        if (offer && offer.content) {
+          const content = offer.content as any;
+          if (content.offerThroughput) {
+            throughput.rus = Number(content.offerThroughput);
+          } else if (content.offerAutopilotSettings) {
+            throughput.autoscaleMaxRus = Number(content.offerAutopilotSettings.maxThroughput);
+          }
+        }
       } catch {
         // Some permissions or modes may not allow reading throughput; ignore silently
       }
