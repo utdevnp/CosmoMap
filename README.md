@@ -33,18 +33,14 @@ docker run -p 3000:3000 ghcr.io/utdevnp/cosmoxp:latest
 
 ```bash
 # Install dependencies
-npm install
-# or
 yarn install
 
 # Run development server
-npm run dev
-# or
 yarn dev
 
 # Build for production
-npm run build
-npm start
+yarn build
+yarn start
 ```
 
 ---

@@ -2,28 +2,35 @@
 FROM --platform=$BUILDPLATFORM node:18-alpine AS deps
 WORKDIR /app
 
-# Copy package files
-COPY package.json yarn.lock* package-lock.json* ./
+# Install yarn globally
+RUN apk add --no-cache --virtual .build-deps alpine-sdk python3 make g++ && \
+    npm install -g yarn && \
+    apk del .build-deps
 
-# Install dependencies using the appropriate package manager
-RUN if [ -f yarn.lock ]; then yarn install --frozen-lockfile; \
-    elif [ -f package-lock.json ]; then npm ci; \
-    else npm install; fi
+# Copy package files
+COPY package.json yarn.lock ./
+
+# Install dependencies using yarn
+RUN yarn install --frozen-lockfile --network-timeout 1000000
 
 # Rebuild the source code only when needed
 FROM --platform=$BUILDPLATFORM node:18-alpine AS builder
 WORKDIR /app
 
+# Install yarn globally for builder stage
+RUN apk add --no-cache --virtual .build-deps alpine-sdk python3 make g++ && \
+    npm install -g yarn && \
+    apk del .build-deps
+
 # Copy package files and install dependencies
-COPY package.json yarn.lock* package-lock.json* ./
+COPY package.json yarn.lock ./
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy source code
 COPY . .
 
 # Build the application
-RUN if [ -f yarn.lock ]; then yarn build; \
-    else npm run build; fi
+RUN yarn build
 
 # Production image, copy all the files and run next
 FROM node:18-alpine AS runner
