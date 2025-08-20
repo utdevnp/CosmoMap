@@ -2,22 +2,22 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install yarn directly using apk (Alpine's package manager)
+# Install yarn globally
 RUN apk add --no-cache yarn
 
 # Copy package files
 COPY package.json yarn.lock ./
 
-# Configure yarn for better network resilience and install dependencies
+# Install dependencies using yarn with network resilience
 RUN yarn config set network-timeout 300000 && \
     yarn config set registry https://registry.npmjs.org/ && \
-    yarn install --frozen-lockfile --network-timeout 300000 --verbose
+    yarn install --frozen-lockfile --network-timeout 300000
 
 # Rebuild the source code only when needed
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install yarn directly using apk
+# Install yarn globally
 RUN apk add --no-cache yarn
 
 # Copy package files and install dependencies
@@ -27,7 +27,7 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the application using yarn
 RUN yarn build
 
 # Production image, copy all the files and run next
@@ -44,8 +44,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Copy built assets and dependencies
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
 
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app
@@ -56,4 +57,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"] 
+CMD ["yarn", "start"] 

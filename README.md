@@ -93,11 +93,10 @@ yarn start
 
 ### Multi-Platform Support
 
-CosmoXp Docker images support multiple Linux platforms:
+CosmoXp Docker images currently support:
 - **Linux AMD64**: Primary build target (x86_64)
-- **Linux ARM64**: Secondary build target (ARM64/AArch64)
 
-> **Note**: While the Docker image is built for Linux, it can run on macOS and Windows using Docker Desktop, which provides Linux container compatibility.
+> **Note**: While the Docker image is built for Linux, it can run on macOS and Windows using Docker Desktop, which provides Linux container compatibility. ARM64 support will be added once network stability is improved.
 
 ### Building Locally
 
@@ -107,9 +106,8 @@ docker build -t cosmoxp .
 
 # Build for specific platform
 docker build --platform linux/amd64 -t cosmoxp:linux-amd64 .
-docker build --platform linux/arm64 -t cosmoxp:linux-arm64 .
 
-# Build for all supported platforms
+# Build for all supported platforms (when available)
 docker buildx build --platform linux/amd64,linux/arm64 -t cosmoxp:multi .
 ```
 
