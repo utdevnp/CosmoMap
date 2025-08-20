@@ -1,26 +1,25 @@
 # Install dependencies only when needed
-FROM --platform=$BUILDPLATFORM node:18-alpine AS deps
+FROM node:18-alpine AS deps
 WORKDIR /app
 
-# Install yarn globally
-RUN apk add --no-cache --virtual .build-deps alpine-sdk python3 make g++ && \
-    npm install -g yarn && \
-    apk del .build-deps
+# Install yarn globally with npm registry configuration for CI
+RUN npm config set registry https://registry.npmjs.org/ && \
+    npm install -g yarn --network-timeout=100000
 
 # Copy package files
 COPY package.json yarn.lock ./
 
-# Install dependencies using yarn
-RUN yarn install --frozen-lockfile --network-timeout 1000000
+# Install dependencies using yarn with CI-friendly settings
+RUN yarn config set network-timeout 300000 && \
+    yarn install --frozen-lockfile --network-timeout 300000
 
 # Rebuild the source code only when needed
-FROM --platform=$BUILDPLATFORM node:18-alpine AS builder
+FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Install yarn globally for builder stage
-RUN apk add --no-cache --virtual .build-deps alpine-sdk python3 make g++ && \
-    npm install -g yarn && \
-    apk del .build-deps
+RUN npm config set registry https://registry.npmjs.org/ && \
+    npm install -g yarn --network-timeout=100000
 
 # Copy package files and install dependencies
 COPY package.json yarn.lock ./
