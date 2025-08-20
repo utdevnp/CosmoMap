@@ -200,6 +200,13 @@ export default function Home() {
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
+  // Safe Mode auto-enablement notification
+  const [safeModeNotification, setSafeModeNotification] = useState<{
+    show: boolean;
+    message: string;
+    connectionName: string;
+  }>({ show: false, message: '', connectionName: '' });
+
   // Auto-scroll to top when console opens or logs change (newest at top)
   useEffect(() => {
     if (consoleOpen && logContainerRef.current) {
@@ -267,6 +274,25 @@ export default function Home() {
   // When selected connection changes, fetch schema and reset query state
   useEffect(() => {
     if (selectedConnection) {
+      // Auto-enable Safe Mode for Prod connections if it's currently disabled
+      if (selectedConnection.isProd !== false && !safeMode) {
+        setSafeMode(true);
+        logToConsole({
+          type: 'info',
+          message: `Safe Mode automatically enabled for Prod connection: ${selectedConnection.name}`,
+          endpoint: selectedConnection.details?.url,
+        });
+        setSafeModeNotification({
+          show: true,
+          message: `Safe Mode enabled for ${selectedConnection.name}`,
+          connectionName: selectedConnection.name,
+        });
+        // Auto-hide notification after 5 seconds
+        setTimeout(() => {
+          setSafeModeNotification({ show: false, message: '', connectionName: '' });
+        }, 5000);
+      }
+      
       setSchema(null);
       setQueryResult(null);
       setError(null);
@@ -803,6 +829,40 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Auto-manage Safe Mode when switching connections
+  const handleConnectionChange = (newConnectionId: string) => {
+    const newConnection = connections.find(c => c.id === newConnectionId);
+    const currentConnection = connections.find(c => c.id === selectedConnectionId);
+    
+    if (newConnection) {
+      // If switching TO a Prod connection and Safe Mode is disabled, enable it
+      if (newConnection.isProd !== false && !safeMode) {
+        setSafeMode(true);
+        // Add to console log
+        logToConsole({
+          type: 'info',
+          message: `Safe Mode automatically enabled for Prod connection: ${newConnection.name}`,
+          endpoint: newConnection.details?.url,
+        });
+        
+        setSafeModeNotification({
+          show: true,
+          message: `Safe Mode enabled for ${newConnection.name}`,
+          connectionName: newConnection.name,
+        });
+        
+        // Auto-hide notification after 5 seconds
+        setTimeout(() => {
+          setSafeModeNotification({ show: false, message: '', connectionName: '' });
+        }, 5000);
+      }
+      // If switching FROM a Prod connection TO a Non-Prod connection, Safe Mode can stay as is
+      // If switching BETWEEN Non-Prod connections, Safe Mode can stay as is
+    }
+    
+    setSelectedConnectionId(newConnectionId);
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <ErrorBoundary logToConsole={logToConsole}>
@@ -855,7 +915,7 @@ export default function Home() {
                         labelId="connection-select-label"
                         value={selectedConnectionId || ''}
                         label="Connection"
-                        onChange={e => setSelectedConnectionId(e.target.value)}
+                        onChange={e => handleConnectionChange(e.target.value)}
                         renderValue={(val) => {
                           const conn = connections.find(c => c.id === val);
                           if (!conn) return '';
@@ -911,6 +971,27 @@ export default function Home() {
               </Box>
             </Toolbar>
           </AppBar>
+          
+          {/* Safe Mode Auto-Enablement Notification */}
+          {safeModeNotification.show && (
+            <Alert 
+              severity="info" 
+              sx={{ 
+                position: 'sticky', 
+                top: 88, 
+                zIndex: 1200,
+                mx: 2,
+                mt: 2,
+                mb: 0
+              }}
+              onClose={() => setSafeModeNotification({ show: false, message: '', connectionName: '' })}
+            >
+              <strong>Safe Mode Enabled:</strong> {safeModeNotification.message} 
+              <br />
+              <small>This ensures write protection for production connections.</small>
+            </Alert>
+          )}
+          
           <AppDrawer
             open={drawerOpen}
             onClose={() => setDrawerOpen(false)}

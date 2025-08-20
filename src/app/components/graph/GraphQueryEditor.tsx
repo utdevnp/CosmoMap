@@ -51,7 +51,7 @@ const GraphQueryEditor: React.FC<GraphQueryEditorProps> = ({
                   [/[_A-Za-z][_\w]*/, 'identifier'],
                   [/\d+/, 'number'],
                   [/".*?"/, 'string'],
-                  [/' .concat(".*?"),'string'],
+                  [/'[^']*'/, 'string'],
                   [/\/\/.*$/, 'comment'],
                 ],
               },
