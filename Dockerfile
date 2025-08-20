@@ -8,8 +8,10 @@ RUN apk add --no-cache yarn
 # Copy package files
 COPY package.json yarn.lock ./
 
-# Install dependencies using yarn
-RUN yarn install --frozen-lockfile
+# Configure yarn for better network resilience and install dependencies
+RUN yarn config set network-timeout 300000 && \
+    yarn config set registry https://registry.npmjs.org/ && \
+    yarn install --frozen-lockfile --network-timeout 300000 --verbose
 
 # Rebuild the source code only when needed
 FROM node:20-alpine AS builder

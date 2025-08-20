@@ -94,7 +94,8 @@ yarn start
 ### Multi-Platform Support
 
 CosmoXp Docker images support multiple Linux platforms:
-- **Linux**: AMD64, ARM64
+- **Linux AMD64**: Primary build target (x86_64)
+- **Linux ARM64**: Secondary build target (ARM64/AArch64)
 
 > **Note**: While the Docker image is built for Linux, it can run on macOS and Windows using Docker Desktop, which provides Linux container compatibility.
 
