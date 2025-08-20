@@ -15,6 +15,14 @@ jobs:
         with:
           fetch-depth: 0  # Needed to fetch all history for tag/main comparison
 
+      - name: Debug repository info
+        run: |
+          echo "Repository: ${{ github.repository }}"
+          echo "Repository owner: ${{ github.repository_owner }}"
+          echo "Repository name: ${{ github.event.repository.name }}"
+          echo "Full repository: ${{ github.repository }}"
+          echo "GHCR image will be: ghcr.io/${{ github.repository }}"
+
       - name: Check if tag is on main
         id: check_tag
         run: |
@@ -37,24 +45,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cosmoxp:latest
+            ghcr.io/${{ github.repository_owner }}/cosmoxp:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max 
